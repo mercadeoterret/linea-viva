@@ -246,23 +246,46 @@ def preparar_df(df):
     if df.empty: return df
     df = df.copy()
 
-    # Detectar columna de decisión
-    col_dec = "🧠 Decisión" if "🧠 Decisión" in df.columns else (
-              "Decision" if "Decision" in df.columns else df.columns[9] if len(df.columns) > 9 else df.columns[-1])
-
-    # Normalizar nombres de columnas clave
-    rename = {}
-    for c in df.columns:
-        cl = c.lower().replace(" ","_")
-        if "producto" in cl and "nombre" not in cl: rename[c] = "Producto"
-        elif "variante" in cl: rename[c] = "Variante"
-        elif "sku" in cl: rename[c] = "SKU"
-        elif "stock" in cl and "min" not in cl: rename[c] = "Stock"
-        elif "ventas" in cl and "60" in cl: rename[c] = "Ventas60d"
-        elif "día" in cl or "dias" in cl: rename[c] = "DiasInv"
-        elif c == col_dec: rename[c] = "Decision"
-
+    # Columnas exactas que genera el Apps Script (crearEncabezados)
+    # "Estado","Producto","Variante","SKU","Stock Actual","Ventas 60d",
+    # "Ventas/Día","Días de Inventario","Stock Mínimo","🧠 Decisión","Prioridad"
+    rename = {
+        "Stock Actual":        "Stock",
+        "Ventas 60d":          "Ventas60d",
+        "Ventas/Día":          "VentasDia",
+        "Días de Inventario":  "DiasInv",
+        "Stock Mínimo":        "StockMin",
+        "🧠 Decisión":         "Decision",
+    }
+    # Solo renombrar las que existen
+    rename = {k:v for k,v in rename.items() if k in df.columns}
     df = df.rename(columns=rename)
+
+    # Si por alguna razón no están con ese nombre exacto, buscar por patrón
+    if "Decision" not in df.columns:
+        for c in df.columns:
+            if "decisi" in c.lower() or "🧠" in c:
+                df = df.rename(columns={c: "Decision"})
+                break
+    if "Stock" not in df.columns:
+        for c in df.columns:
+            if "stock" in c.lower() and "min" not in c.lower() and "Stock" not in df.columns:
+                df = df.rename(columns={c: "Stock"})
+                break
+    if "DiasInv" not in df.columns:
+        for c in df.columns:
+            if "día" in c.lower() or "dias" in c.lower() or "inventario" in c.lower():
+                df = df.rename(columns={c: "DiasInv"})
+                break
+    if "Ventas60d" not in df.columns:
+        for c in df.columns:
+            if "ventas" in c.lower() and "60" in c.lower():
+                df = df.rename(columns={c: "Ventas60d"})
+                break
+
+    if "Decision" not in df.columns:
+        st.error(f"No encontré columna de decisión. Columnas disponibles: {list(df.columns)}")
+        return pd.DataFrame()
 
     df["_urgencia"] = df["Decision"].apply(urgencia)
     df["_orden"]    = df["_urgencia"].map({"CRÍTICO":0,"ALERTA":1,"OK":2,"LIQUIDAR":3,"INFO":4})
@@ -325,13 +348,13 @@ def render_grupo(grupo, ordenes_df, client):
     border_color = {"CRÍTICO":"#FF3B30","ALERTA":"#FFB800","OK":"#30D158"}.get(u,"#2A2A3E")
     bg_color     = {"CRÍTICO":"#1A0A0A","ALERTA":"#1A1400","OK":"#0A1A0A"}.get(u,"#0D0D1A")
 
-    # Resumen de variantes para el header
-    resumen = ""
-    if nc: resumen += f"<span class='badge-critico'>{nc} crítica{'s' if nc>1 else ''}</span> "
-    if na: resumen += f"<span class='badge-alerta'>{na} en alerta</span> "
-    if not nc and not na: resumen = f"<span class='badge-ok'>{grupo['n_variantes']} tallas OK</span>"
-
-    label = f"{badge(u)}&nbsp;&nbsp;<strong style='font-family:Bebas Neue,sans-serif;font-size:17px;letter-spacing:1.5px;'>{producto.upper()}</strong>&nbsp;&nbsp;{resumen}"
+    # st.expander NO acepta HTML — texto plano con emojis
+    icono = {"CRÍTICO":"🔴","ALERTA":"⚠️","OK":"✅","LIQUIDAR":"📦"}.get(u,"•")
+    resumen_txt = ""
+    if nc: resumen_txt += f"  ·  {nc} crítica{'s' if nc>1 else ''}"
+    if na: resumen_txt += f"  ·  {na} en alerta"
+    if not nc and not na: resumen_txt = f"  ·  {grupo['n_variantes']} tallas OK"
+    label = f"{icono}  {producto.upper()}{resumen_txt}"
 
     with st.expander(label, expanded=(u == "CRÍTICO")):
         st.markdown(f"""
