@@ -809,23 +809,18 @@ def vista_estado(df, ordenes_df, client, estado):
                         "Falta configurar WEBAPP_URL en secrets para enviar el email automaticamente."
                     )
                 else:
-                    # Paso 2: llamar Apps Script Web App
+                    # Paso 2: escribir celda disparadora — Apps Script la detecta con onChange
                     try:
-                        import requests
-                        resp = requests.post(
-                            WEBAPP_URL,
-                            json={"accion": "enviarReporteUrgente"},
-                            timeout=30,
-                        )
-                        if resp.status_code == 200:
+                        ws_rep = get_ws(client, HOJA_REPORTE)
+                        if ws_rep:
+                            # Celda A1 actua como trigger: Apps Script revisa si dice "ENVIAR"
+                            ws_rep.update("A1", [["ENVIAR"]])
                             st.success(
-                                "✅ Email enviado a " + ALERTA_EMAIL +
-                                " con reporte PDF de " + str(n_urgentes) + " productos."
+                                "✅ Reporte listo — Apps Script enviará el email a " +
+                                ALERTA_EMAIL + " en los proximos segundos."
                             )
-                        else:
-                            st.error("Apps Script respondio con error: " + str(resp.status_code))
                     except Exception as e:
-                        st.error("Error llamando Apps Script: " + str(e))
+                        st.error("Error activando trigger: " + str(e))
         st.markdown("</div>", unsafe_allow_html=True)
 
     # Agrupar y filtrar
