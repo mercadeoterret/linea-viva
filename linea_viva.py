@@ -431,14 +431,15 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
 
 # ── RENDER PRODUCTO ──────────────────────────────────────────────────────────
 
-def render_producto(grupo, estado, mostrar_form, ordenes_df, client):
+def render_producto(grupo, estado, mostrar_form, ordenes_df, client, tipo_idx="0"):
     prod      = grupo["producto"]
     es_bs     = grupo["es_bs"]
     variantes = grupo["variantes"]
     n         = grupo["n"]
 
     c_borde   = color_borde(estado)
-    prod_key  = "".join(c for c in prod if c.isalnum() or c == "_")[:20]
+    # Clave unica: tipo_idx garantiza no colisiones aunque prod_key se repita
+    prod_key  = "".join(c for c in prod if c.isalnum() or c == "_")[:15] + "_" + tipo_idx.replace(" ","")[:10]
     tallas    = str(n) + " talla" + ("s" if n > 1 else "")
     bs_html   = " · <span style='color:#D4FF00;font-size:10px;'>⭐ BS</span>" if es_bs else ""
 
@@ -694,8 +695,8 @@ def vista_estado(df, ordenes_df, client, estado):
             "</div>",
             unsafe_allow_html=True,
         )
-        for grupo in grupos:
-            render_producto(grupo, estado, mostrar_form, ordenes_df, client)
+        for idx, grupo in enumerate(grupos):
+            render_producto(grupo, estado, mostrar_form, ordenes_df, client, tipo_idx=tipo+"_"+str(idx))
 
 
 # ── VISTA ORDENES ─────────────────────────────────────────────────────────────
