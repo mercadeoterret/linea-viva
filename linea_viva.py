@@ -88,16 +88,23 @@ section[data-testid="stSidebar"] .stButton > button {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 13px !important;
     font-weight: 500 !important;
-    letter-spacing: 0 !important;
+    letter-spacing: 0.3px !important;
     border: none !important;
     border-radius: 6px !important;
-    padding: 8px 12px !important;
+    padding: 9px 12px !important;
     text-align: left !important;
     width: 100%;
+    justify-content: flex-start !important;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
-    background: rgba(255,255,255,0.05) !important;
+    background: rgba(255,255,255,0.06) !important;
     transform: none !important;
+}
+section[data-testid="stSidebar"] .stButton > button:focus {
+    background: rgba(212,255,0,0.10) !important;
+    color: var(--accent) !important;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 [data-testid="stMetric"] {
@@ -484,43 +491,15 @@ def render_sidebar(conteos):
             label_color = "#D4FF00" if active else "#E2E2F0"
             bg          = "background:rgba(212,255,0,0.08);" if active else ""
 
-            col_a, col_b = st.columns([4, 1])
-            with col_a:
-                st.markdown(f"""
-                <div style='display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:6px;{bg}'>
-                    <span style='font-size:14px;'>{cfg["icon"]}</span>
-                    <span style='font-family:DM Sans,sans-serif;font-size:13px;font-weight:500;color:{label_color};'>{cfg["label"]}</span>
-                </div>""", unsafe_allow_html=True)
-            with col_b:
-                st.markdown(f"""
-                <div style='display:flex;align-items:center;justify-content:center;height:100%;'>
-                    <span style='background:{badge_color};color:{badge_text};
-                                 font-family:Bebas Neue,sans-serif;font-size:13px;
-                                 padding:1px 8px;border-radius:20px;min-width:28px;text-align:center;'>
-                        {cnt}
-                    </span>
-                </div>""", unsafe_allow_html=True)
-
-            # Boton invisible sobre toda la fila
-            if st.button(f"ir_{estado}", key=f"nav_{estado}", label_visibility="collapsed"):
+            btn_label = f"{cfg['icon']}  {cfg['label']}  {cnt}"
+            if st.button(btn_label, key=f"nav_{estado}"):
                 st.session_state.vista = estado
                 st.rerun()
 
         st.markdown("<div style='border-top:1px solid #1C1C2E;margin:12px 0;'></div>", unsafe_allow_html=True)
 
         ordenes_active = vista_actual == "ORDENES"
-        col_a, col_b = st.columns([4,1])
-        with col_a:
-            bg_ord = "background:rgba(212,255,0,0.08);" if ordenes_active else ""
-            lc_ord = "#D4FF00" if ordenes_active else "#E2E2F0"
-            st.markdown(f"""
-            <div style='display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:6px;{bg_ord}'>
-                <span style='font-size:14px;'>📋</span>
-                <span style='font-family:DM Sans,sans-serif;font-size:13px;font-weight:500;color:{lc_ord};'>Ordenes</span>
-            </div>""", unsafe_allow_html=True)
-        with col_b:
-            st.markdown("")
-        if st.button("ir_ordenes", key="nav_ordenes", label_visibility="collapsed"):
+        if st.button("📋  Ordenes", key="nav_ordenes"):
             st.session_state.vista = "ORDENES"; st.rerun()
 
         st.markdown(f"""
