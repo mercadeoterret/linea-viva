@@ -23,6 +23,9 @@ SPREADSHEET_ID   = "1M6bCu6fSXE1ReYBqBvC78zdX-0fbGuCdmSn6JdgUv9s"
 HOJA_INVENTARIO  = "Dashboard_Inventario"
 HOJA_ORDENES     = "Ordenes_Produccion"
 ALERTA_EMAIL     = "mercadeo@terretsports.com"
+HOJA_REPORTE     = "Reporte_Urgente"
+# URL del Web App de Apps Script — pegar aqui despues de deployar
+WEBAPP_URL       = st.secrets.get("WEBAPP_URL", "")
 FABRICACION_DIAS = 20
 UMBRAL_BS        = 20
 
@@ -250,6 +253,61 @@ def actualizar_estado_orden(client, oid, estado):
     except:
         pass
     return False
+
+
+def escribir_reporte(client, sub_df):
+    """
+    Sobreescribe Reporte_Urgente con los datos actuales para que
+    Apps Script los lea y genere el PDF + email.
+    Columnas: Producto | Tipo | Variante | SKU | Stock | Dias | Ventas60d | Sugerido | Estado
+    """
+    ws = get_ws(client, HOJA_REPORTE)
+    if not ws:
+        return False
+    try:
+        # Limpiar hoja completa
+        ws.clear()
+
+        # Encabezado
+        headers = ["Producto", "Tipo", "Variante", "SKU",
+                   "Stock Actual", "Dias Inventario", "Ventas 60d",
+                   "Unidades Sugeridas", "Estado Variante"]
+        ws.append_row(headers)
+
+        # Filas
+        rows = []
+        for _, row in sub_df.iterrows():
+            stk  = int(row.get("Stock", 0))
+            v60  = int(row.get("Ventas60d", 0))
+            try:
+                dias_n = float(str(row.get("DiasInv_n", row.get("DiasInv", 9999))))
+            except:
+                dias_n = 9999
+            sug, _ = sugerir_cantidad(stk, v60, dias_n, "URGENTE")
+            estado_var = "QUIEBRE" if stk == 0 else str(int(dias_n)) + " dias"
+            rows.append([
+                str(row.get("Producto", "")),
+                str(row.get("Tipo", "")),
+                str(row.get("Variante", "")),
+                str(row.get("SKU", "")),
+                stk,
+                int(dias_n) if dias_n < 9999 else 0,
+                v60,
+                sug,
+                estado_var,
+            ])
+        if rows:
+            ws.append_rows(rows)
+
+        # Metadata para Apps Script
+        ws.update("A1", [["_generado", datetime.now().strftime("%Y-%m-%d %H:%M"),
+                          "_total", len(rows)]], value_input_option="RAW")
+        # Re-escribir encabezado real en fila 2
+        ws.insert_row(headers, index=2)
+        return True
+    except Exception as e:
+        st.error("Error escribiendo reporte: " + str(e))
+        return False
 
 
 def nuevo_id(df):
@@ -730,55 +788,45 @@ def vista_estado(df, ordenes_df, client, estado):
         tipos_disp = sorted(sub["Tipo"].dropna().unique().tolist())
         tipo_sel = st.selectbox("Categoria", ["Todas"] + tipos_disp, label_visibility="collapsed")
 
-    # Email urgentes — con variantes y sugerencias
+    # Boton enviar alerta — escribe Reporte_Urgente y llama Apps Script
     if estado == "URGENTE":
         prods_u = sub["Producto"].unique()
-
-        # Construir cuerpo detallado
-        lineas = []
-        lineas.append("URGENTE — " + str(len(prods_u)) + " productos necesitan reposicion")
-        lineas.append("=" * 50)
-        lineas.append("")
-
-        for prod_nombre in prods_u[:20]:
-            lineas.append(prod_nombre.upper())
-            filas = sub[sub["Producto"] == prod_nombre]
-            for _, frow in filas.iterrows():
-                var   = str(frow.get("Variante", "—"))
-                stk   = int(frow.get("Stock", 0))
-                v60   = int(frow.get("Ventas60d", 0))
-                dias  = str(frow.get("DiasInv", "—"))
-                try:
-                    dias_n = float(str(frow.get("DiasInv_n", frow.get("DiasInv", 9999))))
-                except:
-                    dias_n = 9999
-                sug, _ = sugerir_cantidad(stk, v60, dias_n, "URGENTE")
-                estado_var = "QUIEBRE" if stk == 0 else dias + " dias"
-                linea = (
-                    "  └ " + var.ljust(20) +
-                    " | Stock: " + str(stk).rjust(4) + "u" +
-                    " | Pedir: " + str(sug).rjust(4) + "u" +
-                    " | " + estado_var
-                )
-                lineas.append(linea)
-            lineas.append("")
-
-        lineas.append("=" * 50)
-        lineas.append("Entra a Linea Viva para programar los pedidos.")
-
-        cuerpo = "\n".join(lineas)
-        s = urllib.parse.quote("⚡ URGENTE: Reposicion Terret — " + str(len(prods_u)) + " productos")
-        b = urllib.parse.quote(cuerpo)
+        n_urgentes = len(prods_u)
 
         st.markdown(
-            "<a href='mailto:" + ALERTA_EMAIL + "?subject=" + s + "&body=" + b + "'>"
-            "<button style='background:#FF3B30;color:white;font-family:Bebas Neue,sans-serif;"
-            "font-size:12px;letter-spacing:2px;border:none;border-radius:4px;"
-            "padding:7px 16px;cursor:pointer;margin-bottom:8px;'>"
-            "📧 ENVIAR ALERTA — " + str(len(prods_u)) + " productos urgentes"
-            "</button></a>",
+            "<div style='margin-bottom:8px;'>",
             unsafe_allow_html=True,
         )
+        if st.button("📧  ENVIAR ALERTA — " + str(n_urgentes) + " productos urgentes", key="btn_alerta_email"):
+            with st.spinner("Preparando reporte y enviando email..."):
+                # Paso 1: escribir datos en Reporte_Urgente
+                ok_sheet = escribir_reporte(client, sub)
+                if not ok_sheet:
+                    st.error("No se pudo escribir el reporte en Sheets.")
+                elif not WEBAPP_URL:
+                    st.warning(
+                        "Datos escritos en Sheets correctamente. "
+                        "Falta configurar WEBAPP_URL en secrets para enviar el email automaticamente."
+                    )
+                else:
+                    # Paso 2: llamar Apps Script Web App
+                    try:
+                        import requests
+                        resp = requests.post(
+                            WEBAPP_URL,
+                            json={"accion": "enviarReporteUrgente"},
+                            timeout=30,
+                        )
+                        if resp.status_code == 200:
+                            st.success(
+                                "✅ Email enviado a " + ALERTA_EMAIL +
+                                " con reporte PDF de " + str(n_urgentes) + " productos."
+                            )
+                        else:
+                            st.error("Apps Script respondio con error: " + str(resp.status_code))
+                    except Exception as e:
+                        st.error("Error llamando Apps Script: " + str(e))
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Agrupar y filtrar
     grupos_tipo = agrupar(df, estado)
