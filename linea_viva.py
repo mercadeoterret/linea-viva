@@ -229,38 +229,47 @@ VENTAS_MIN         = 3    # ventas 60d minimas para considerar activo
 
 def calcular_urgencia(stock, ventas60d, dias_inv):
     """
-    Recalcula urgencia desde los numeros crudos.
-    No confiar en la etiqueta del Sheet — puede estar desactualizada o corrupta.
-    
-    Reglas:
-    - Sin ventas y sin stock            → INFO (producto inactivo)
-    - Stock = 0 y tiene ventas          → CRITICO (quiebre)
-    - Ventas bajas (<3/60d) y con stock → LIQUIDAR (producto lento)
-    - Dias <= 15 y tiene ventas         → CRITICO (reprogramar ya)
-    - Dias <= 60 y tiene ventas         → OK (saludable)
-    - Dias > 60 y tiene ventas          → OK (holgado)
+    Reglas exactas segun reglas_dashboard.pdf — Terret
+
+    Stock=0  y ventas=0          -> INFO     (sin actividad)
+    Stock=0  y ventas >= 10      -> CRITICO  (quiebre de stock)
+    Ventas 0-2                   -> LIQUIDAR (producto muerto)
+    Ventas >= 10 y dias < 15     -> CRITICO  (reprogramar ya)
+    Ventas >= 10 y dias 15-60    -> OK       (saludable)
+    Ventas >= 10 y dias 61-120   -> ALERTA   (sobrestock leve)
+    Ventas >= 10 y dias > 120    -> ALERTA   (reducir pedidos)
+    Ventas 3-9  y dias >= 15     -> ALERTA   (monitorear)
+    Ventas 3-9  y dias < 15      -> ALERTA   (evaluar reposicion)
     """
     try:
         stock     = float(stock)
         ventas60d = float(ventas60d)
-        dias_inv  = float(dias_inv) if str(dias_inv).lower() not in ("inf", "", "nan") else 9999
+        dias_inv  = float(str(dias_inv)) if str(dias_inv).lower() not in ("inf","","nan") else 9999
     except:
         return "INFO"
 
+    # Sin actividad
     if ventas60d == 0 and stock == 0:
         return "INFO"
-    if stock == 0 and ventas60d >= VENTAS_MIN:
+
+    # Quiebre de stock — prioridad maxima
+    if stock == 0 and ventas60d >= 10:
         return "CRITICO"
-    if ventas60d < VENTAS_MIN and stock > 0:
+
+    # Liquidar — 0 a 2 ventas en 60d (muerto o casi muerto)
+    if ventas60d <= 2:
         return "LIQUIDAR"
-    if ventas60d >= VENTAS_MIN and dias_inv <= UMBRAL_REPROGRAMAR:
-        return "CRITICO"
-    # Con inventario para mas de 30 dias y ventas activas → OK sin importar etiqueta
-    if ventas60d >= VENTAS_MIN and dias_inv > 30:
-        return "OK"
-    if ventas60d >= VENTAS_MIN and dias_inv <= UMBRAL_SALUDABLE:
-        return "ALERTA"
-    return "OK"
+
+    # Buena rotacion (>= 10 ventas)
+    if ventas60d >= 10:
+        if dias_inv < 15:
+            return "CRITICO"   # reprogramar ya
+        if dias_inv <= 60:
+            return "OK"        # saludable — rango ideal
+        return "ALERTA"        # sobrestock leve o reducir pedidos
+
+    # Rotacion baja (3-9 ventas) — monitorear o evaluar reposicion
+    return "ALERTA"
 
 
 def preparar(df):
