@@ -730,18 +730,52 @@ def vista_estado(df, ordenes_df, client, estado):
         tipos_disp = sorted(sub["Tipo"].dropna().unique().tolist())
         tipo_sel = st.selectbox("Categoria", ["Todas"] + tipos_disp, label_visibility="collapsed")
 
-    # Email urgentes
+    # Email urgentes — con variantes y sugerencias
     if estado == "URGENTE":
         prods_u = sub["Producto"].unique()
-        lista = "\n".join("- " + p for p in prods_u[:15])
-        s = urllib.parse.quote("URGENTE: Reposicion Terret")
-        b = urllib.parse.quote("Productos urgentes (" + str(len(prods_u)) + "):\n\n" + lista + "\n\nEntra a Linea Viva.")
+
+        # Construir cuerpo detallado
+        lineas = []
+        lineas.append("URGENTE — " + str(len(prods_u)) + " productos necesitan reposicion")
+        lineas.append("=" * 50)
+        lineas.append("")
+
+        for prod_nombre in prods_u[:20]:
+            lineas.append(prod_nombre.upper())
+            filas = sub[sub["Producto"] == prod_nombre]
+            for _, frow in filas.iterrows():
+                var   = str(frow.get("Variante", "—"))
+                stk   = int(frow.get("Stock", 0))
+                v60   = int(frow.get("Ventas60d", 0))
+                dias  = str(frow.get("DiasInv", "—"))
+                try:
+                    dias_n = float(str(frow.get("DiasInv_n", frow.get("DiasInv", 9999))))
+                except:
+                    dias_n = 9999
+                sug, _ = sugerir_cantidad(stk, v60, dias_n, "URGENTE")
+                estado_var = "QUIEBRE" if stk == 0 else dias + " dias"
+                linea = (
+                    "  └ " + var.ljust(20) +
+                    " | Stock: " + str(stk).rjust(4) + "u" +
+                    " | Pedir: " + str(sug).rjust(4) + "u" +
+                    " | " + estado_var
+                )
+                lineas.append(linea)
+            lineas.append("")
+
+        lineas.append("=" * 50)
+        lineas.append("Entra a Linea Viva para programar los pedidos.")
+
+        cuerpo = "\n".join(lineas)
+        s = urllib.parse.quote("⚡ URGENTE: Reposicion Terret — " + str(len(prods_u)) + " productos")
+        b = urllib.parse.quote(cuerpo)
+
         st.markdown(
             "<a href='mailto:" + ALERTA_EMAIL + "?subject=" + s + "&body=" + b + "'>"
             "<button style='background:#FF3B30;color:white;font-family:Bebas Neue,sans-serif;"
             "font-size:12px;letter-spacing:2px;border:none;border-radius:4px;"
             "padding:7px 16px;cursor:pointer;margin-bottom:8px;'>"
-            "ENVIAR ALERTA — " + str(len(prods_u)) + " productos urgentes"
+            "📧 ENVIAR ALERTA — " + str(len(prods_u)) + " productos urgentes"
             "</button></a>",
             unsafe_allow_html=True,
         )
