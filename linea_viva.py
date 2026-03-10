@@ -10,6 +10,7 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime
 import urllib.parse
+import uuid
 
 st.set_page_config(
     page_title="Linea Viva · Terret",
@@ -398,26 +399,28 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
     if not mostrar_form:
         return
 
+    # Key unica por widget — combina prefix + sku + uuid corto
+    _uk = key_prefix + sku + "_" + uuid.uuid4().hex[:6]
     cf1, cf2, cf3, cf4 = st.columns([2, 2, 2, 2])
     with cf1:
         cant = st.number_input(
             "Cantidad", min_value=1, value=50, step=10,
-            key="c_" + key_prefix + sku,
+            key="c_" + _uk,
         )
     with cf2:
         fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
         fecha = st.date_input(
             "Fecha limite", value=fecha_def,
-            key="f_" + key_prefix + sku,
+            key="f_" + _uk,
         )
     with cf3:
         notas = st.text_input(
             "Notas", placeholder="Opcional",
-            key="n_" + key_prefix + sku,
+            key="n_" + _uk,
         )
     with cf4:
         st.write("")
-        if st.button("PROGRAMAR", key="b_" + key_prefix + sku):
+        if st.button("PROGRAMAR", key="b_" + _uk):
             orden = {
                 "id": nuevo_id(ordenes_df), "sku": sku,
                 "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -431,15 +434,15 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
 
 # ── RENDER PRODUCTO ──────────────────────────────────────────────────────────
 
-def render_producto(grupo, estado, mostrar_form, ordenes_df, client, tipo_idx="0"):
+def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
     prod      = grupo["producto"]
     es_bs     = grupo["es_bs"]
     variantes = grupo["variantes"]
     n         = grupo["n"]
 
     c_borde   = color_borde(estado)
-    # Clave unica: tipo_idx garantiza no colisiones aunque prod_key se repita
-    prod_key  = "".join(c for c in prod if c.isalnum() or c == "_")[:15] + "_" + tipo_idx.replace(" ","")[:10]
+    # uid es un entero incremental global — 100% unico sin importar el nombre
+    prod_key  = "p" + uid
     tallas    = str(n) + " talla" + ("s" if n > 1 else "")
     bs_html   = " · <span style='color:#D4FF00;font-size:10px;'>⭐ BS</span>" if es_bs else ""
 
@@ -484,8 +487,8 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, tipo_idx="0
     )
 
     # Variantes
-    for _, row in variantes.iterrows():
-        render_variante(row, mostrar_form, ordenes_df, client, key_prefix=prod_key + "_")
+    for var_idx, (_, row) in enumerate(variantes.iterrows()):
+        render_variante(row, mostrar_form, ordenes_df, client, key_prefix=prod_key + "_v" + str(var_idx) + "_")
 
     # Pie de tarjeta — cerrado
     st.markdown(
@@ -516,18 +519,19 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, tipo_idx="0
             "</div>",
             unsafe_allow_html=True,
         )
+        _pk = prod_key + "_" + uuid.uuid4().hex[:6]
         pc1, pc2, pc3 = st.columns([2, 2, 3])
         with pc1:
             cant_all = st.number_input(
                 "Cant. por talla", min_value=1, value=50, step=10,
-                key="ca_" + prod_key,
+                key="ca_" + _pk,
             )
         with pc2:
             fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
-            fecha_all = st.date_input("Fecha limite", value=fecha_def, key="fa_" + prod_key)
+            fecha_all = st.date_input("Fecha limite", value=fecha_def, key="fa_" + _pk)
         with pc3:
             st.write("")
-            if st.button("PROGRAMAR " + str(n) + " TALLAS", key="ba_" + prod_key):
+            if st.button("PROGRAMAR " + str(n) + " TALLAS", key="ba_" + _pk):
                 creadas = []
                 for _, row in variantes.iterrows():
                     o = {
@@ -680,6 +684,7 @@ def vista_estado(df, ordenes_df, client, estado):
         st.info("Sin resultados.")
         return
 
+    prod_counter = [0]  # contador global mutable para keys unicas
     for tipo, grupos in grupos_tipo.items():
         st.markdown(
             "<div style='"
@@ -695,8 +700,9 @@ def vista_estado(df, ordenes_df, client, estado):
             "</div>",
             unsafe_allow_html=True,
         )
-        for idx, grupo in enumerate(grupos):
-            render_producto(grupo, estado, mostrar_form, ordenes_df, client, tipo_idx=tipo+"_"+str(idx))
+        for grupo in grupos:
+            prod_counter[0] += 1
+            render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid=str(prod_counter[0]))
 
 
 # ── VISTA ORDENES ─────────────────────────────────────────────────────────────
