@@ -1,7 +1,6 @@
 """
-LINEA VIVA v4 - Sistema de Reposicion de Inventario
-Terret | Streamlit + Google Sheets
-Agrupacion: Tipo de producto > Producto > Talla
+LINEA VIVA v5 — Sistema de Reposicion de Inventario
+Terret | Sidebar por estado de decision
 """
 
 import streamlit as st
@@ -12,10 +11,10 @@ from datetime import datetime
 import urllib.parse
 
 st.set_page_config(
-    page_title="Linea Viva - Terret",
-    page_icon="lightning",
+    page_title="Linea Viva · Terret",
+    page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 SPREADSHEET_ID   = "1M6bCu6fSXE1ReYBqBvC78zdX-0fbGuCdmSn6JdgUv9s"
@@ -23,154 +22,226 @@ HOJA_INVENTARIO  = "Dashboard_Inventario"
 HOJA_ORDENES     = "Ordenes_Produccion"
 ALERTA_EMAIL     = "mercadeo@terretsports.com"
 FABRICACION_DIAS = 20
-UMBRAL_BS        = 20  # ventas 60d para ser best seller — ajustar segun temporada
+UMBRAL_BS        = 20
 
-# ─── ESTILOS ────────────────────────────────────────────────────────────────
+# ── REGLAS (segun reglas_dashboard.pdf de Terret) ────────────────────────────
 
+def calcular_estado(stock, ventas60d, dias_inv):
+    try:
+        s = float(stock)
+        v = float(ventas60d)
+        d = float(str(dias_inv)) if str(dias_inv).lower() not in ("inf","","nan") else 9999
+    except:
+        return "SIN_ACTIVIDAD"
+
+    if v == 0 and s == 0:   return "SIN_ACTIVIDAD"
+    if s == 0 and v >= 10:  return "URGENTE"       # quiebre de stock
+    if v <= 2:              return "LIQUIDAR"       # 0-2 ventas: producto muerto
+    if v >= 10 and d < 15:  return "URGENTE"        # reprogramar ya
+    if v >= 10 and d <= 60: return "SALUDABLE"
+    if v >= 10:             return "MONITOREAR"     # sobrestock
+    if 3 <= v <= 9 and d < 15: return "EVALUAR"    # rotacion baja y agotandose
+    return "MONITOREAR"                             # rotacion baja con stock
+
+ESTADOS = {
+    "URGENTE":       {"icon":"⚡","label":"Urgente",       "color":"#FF3B30","desc":"Quiebre o menos de 15 dias. Pedir esta semana."},
+    "EVALUAR":       {"icon":"⚠️","label":"Evaluar",       "color":"#FFB800","desc":"Rotacion baja y stock acabandose. Decision manual."},
+    "MONITOREAR":    {"icon":"👁","label":"Monitorear",    "color":"#4488FF","desc":"Sin accion urgente. Revisar en proximo ciclo."},
+    "LIQUIDAR":      {"icon":"📦","label":"Liquidar",      "color":"#FF6B35","desc":"0-2 ventas en 60d. Precio especial o retiro."},
+    "SALUDABLE":     {"icon":"✅","label":"Saludable",     "color":"#00C853","desc":"Stock ideal. Sin accion requerida."},
+    "SIN_ACTIVIDAD": {"icon":"⚪","label":"Sin movimiento","color":"#3A3A5C","desc":"Stock 0 y ventas 0. Revisar si archivar."},
+}
+
+# ── ESTILOS ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
+:root {
+    --bg:     #07070F;
+    --surf:   #0F0F1A;
+    --border: #1C1C2E;
+    --muted:  #3A3A5C;
+    --text:   #E2E2F0;
+    --dim:    #5A5A7A;
+    --accent: #D4FF00;
+    --red:    #FF3B30;
+    --amber:  #FFB800;
+    --green:  #00C853;
+    --blue:   #4488FF;
+    --orange: #FF6B35;
+}
 html, body, [data-testid="stAppViewContainer"] {
-    background-color: #0A0A14 !important; color: #E8E8F0 !important;
+    background: var(--bg) !important; color: var(--text) !important;
+    font-family: 'DM Sans', sans-serif;
 }
-[data-testid="stAppViewContainer"] > .main { background-color: #0A0A14; }
-[data-testid="stHeader"] { background: #0A0A14 !important; border-bottom: 1px solid #1A1A2E; }
-section[data-testid="stSidebar"] { background: #0D0D1A !important; }
-* { font-family: 'DM Sans', sans-serif; }
-h1,h2,h3 { font-family: 'Bebas Neue', sans-serif !important; letter-spacing: 2px; }
+[data-testid="stAppViewContainer"] > .main { background: var(--bg); }
+[data-testid="stHeader"] { background: var(--bg) !important; border-bottom: 1px solid var(--border); }
 
-.stButton > button {
-    background: #D4FF00 !important; color: #0A0A14 !important;
-    font-family: 'Bebas Neue', sans-serif !important; font-size: 14px !important;
-    letter-spacing: 2px !important; border: none !important;
-    border-radius: 4px !important; padding: 8px 16px !important;
-    width: 100%; transition: all 0.15s ease;
+section[data-testid="stSidebar"] {
+    background: var(--surf) !important;
+    border-right: 1px solid var(--border) !important;
 }
-.stButton > button:hover { background: #BFEA00 !important; transform: translateY(-1px); }
+section[data-testid="stSidebar"] .stButton > button {
+    background: transparent !important;
+    color: var(--text) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    text-align: left !important;
+    width: 100%;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(255,255,255,0.05) !important;
+    transform: none !important;
+}
 
-.stTextInput > div > div > input,
-.stNumberInput > div > div > input,
-.stDateInput > div > div > input {
-    background: #12121F !important; border: 1px solid #2A2A3E !important;
-    color: #E8E8F0 !important; border-radius: 4px !important;
-}
 [data-testid="stMetric"] {
-    background: #12121F; border: 1px solid #1E1E30;
-    border-radius: 8px; padding: 14px 18px;
+    background: var(--surf); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 14px;
 }
 [data-testid="stMetricValue"] {
-    color: #D4FF00 !important; font-family: 'Bebas Neue', sans-serif !important; font-size: 1.8rem !important;
+    font-family: 'Bebas Neue', sans-serif !important;
+    font-size: 1.8rem !important; color: var(--accent) !important;
 }
 [data-testid="stMetricLabel"] {
-    color: #6B6B8A !important; font-size: 10px !important;
-    text-transform: uppercase; letter-spacing: 1.5px;
+    font-size: 9px !important; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--dim) !important;
 }
-.stTabs [data-baseweb="tab-list"] {
-    background: #0D0D1A; border-radius: 8px; padding: 4px; gap: 4px; border: 1px solid #1A1A2E;
+.stButton > button {
+    background: var(--accent) !important; color: #07070F !important;
+    font-family: 'Bebas Neue', sans-serif !important;
+    font-size: 13px !important; letter-spacing: 2px !important;
+    border: none !important; border-radius: 4px !important;
+    padding: 8px 16px !important; width: 100%;
 }
-.stTabs [data-baseweb="tab"] {
-    background: transparent; color: #6B6B8A;
-    font-family: 'Bebas Neue', sans-serif; font-size: 14px;
-    letter-spacing: 1.5px; border-radius: 6px; padding: 8px 18px;
-}
-.stTabs [aria-selected="true"] { background: #D4FF00 !important; color: #0A0A14 !important; }
+.stButton > button:hover { opacity: 0.85 !important; }
 
-[data-testid="stExpander"] { border-radius: 8px !important; margin-bottom: 6px !important; }
-hr { border-color: #1A1A2E !important; }
+.stTextInput input, .stNumberInput input, .stDateInput input {
+    background: var(--surf) !important; border: 1px solid var(--border) !important;
+    color: var(--text) !important; border-radius: 4px !important; font-size: 13px !important;
+}
+.stSelectbox [data-baseweb="select"] > div {
+    background: var(--surf) !important; border-color: var(--border) !important;
+}
+hr { border-color: var(--border) !important; }
 
-.tipo-header {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 13px; letter-spacing: 3px;
-    color: #6B6B8A; text-transform: uppercase;
-    border-bottom: 1px solid #1A1A2E;
-    padding-bottom: 6px; margin: 24px 0 12px 0;
+.tipo-sep {
+    font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 3px;
+    color: var(--muted); text-transform: uppercase;
+    padding: 20px 0 6px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px;
 }
-.fila-critica {
-    background: #12121F; border-left: 3px solid #FF3B30;
-    border-radius: 4px; padding: 10px 14px; margin-bottom: 6px;
+.prod-card {
+    background: var(--surf); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 6px; overflow: hidden;
 }
-.fila-alerta {
-    background: #12121F; border-left: 3px solid #FFB800;
-    border-radius: 4px; padding: 10px 14px; margin-bottom: 6px;
+.prod-header {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
 }
-.fila-ok {
-    background: #0D0D1A; border-left: 3px solid #2A2A3E;
-    border-radius: 4px; padding: 8px 14px; margin-bottom: 4px;
+.prod-nombre { font-weight: 600; font-size: 14px; flex: 1; line-height: 1.2; }
+.tag {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    padding: 2px 8px; border-radius: 3px; white-space: nowrap;
 }
-.talla-nombre { font-weight: 600; font-size: 15px; }
-.lbl { font-size: 10px; color: #6B6B8A; text-transform: uppercase; letter-spacing: 1px; }
-.bs-badge {
-    background: #D4FF00; color: #0A0A14;
-    font-size: 9px; font-weight: 700;
-    padding: 1px 7px; border-radius: 20px;
-    text-transform: uppercase; letter-spacing: 1px;
-    display: inline-block; margin-left: 6px;
-    vertical-align: middle;
+.tag-red    { background: rgba(255,59,48,0.15);  color: var(--red); }
+.tag-amber  { background: rgba(255,184,0,0.15);  color: var(--amber); }
+.tag-blue   { background: rgba(68,136,255,0.15); color: var(--blue); }
+.tag-orange { background: rgba(255,107,53,0.15); color: var(--orange); }
+.tag-muted  { background: rgba(58,58,92,0.4);   color: var(--dim); }
+.tag-green  { background: rgba(0,200,83,0.15);   color: var(--green); }
+.tag-bs     { background: rgba(212,255,0,0.12);  color: var(--accent); font-size: 9px; }
+
+.var-header {
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1.2fr;
+    gap: 8px; padding: 5px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 9px; color: var(--dim); letter-spacing: 1.5px;
+    text-transform: uppercase; font-family: 'DM Mono', monospace;
 }
+.var-row {
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1.2fr;
+    gap: 8px; padding: 8px 14px;
+    border-top: 1px solid var(--border); align-items: center; font-size: 13px;
+}
+.var-row-critica { background: rgba(255,59,48,0.04); }
+.var-row-alerta  { background: rgba(255,184,0,0.03); }
+.vname  { font-weight: 500; }
+.vstock { font-family: 'DM Mono', monospace; color: var(--dim); font-size: 12px; }
+.vdias-rojo  { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--red);   line-height:1; }
+.vdias-amber { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--amber); line-height:1; }
+.vdias-green { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--green); line-height:1; }
+.vdias-blue  { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--blue);  line-height:1; }
+.vdias-dim   { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--dim);   line-height:1; }
+
+.prog-panel {
+    background: rgba(212,255,0,0.03);
+    border-top: 1px solid rgba(212,255,0,0.12);
+    padding: 12px 14px 14px 14px;
+}
+.banner {
+    border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--surf); border: 1px solid var(--border);
+}
+.banner-icon   { font-size: 24px; flex-shrink: 0; }
+.banner-title  { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 2px; }
+.banner-desc   { font-size: 12px; color: var(--dim); margin-top: 2px; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ─── LOGIN ──────────────────────────────────────────────────────────────────
-
+# ── LOGIN ─────────────────────────────────────────────────────────────────────
 def check_login():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     if not st.session_state.logged_in:
         st.markdown("""
-        <div style='max-width:360px;margin:80px auto;text-align:center;'>
-            <div style='background:#D4FF00;width:52px;height:52px;border-radius:8px;
+        <div style='max-width:340px;margin:80px auto;text-align:center;'>
+            <div style='background:#D4FF00;width:48px;height:48px;border-radius:7px;
                         display:flex;align-items:center;justify-content:center;
-                        font-family:Bebas Neue,sans-serif;font-size:26px;color:#0A0A14;
-                        margin:0 auto 20px auto;'>LV</div>
-            <div style='font-family:Bebas Neue,sans-serif;font-size:30px;letter-spacing:3px;color:#E8E8F0;margin-bottom:4px;'>LINEA VIVA</div>
-            <div style='font-size:11px;color:#6B6B8A;letter-spacing:2px;text-transform:uppercase;margin-bottom:36px;'>Terret - Inventario</div>
+                        font-family:Bebas Neue,sans-serif;font-size:24px;color:#07070F;
+                        margin:0 auto 18px;'>LV</div>
+            <div style='font-family:Bebas Neue,sans-serif;font-size:28px;letter-spacing:3px;color:#E2E2F0;margin-bottom:2px;'>LINEA VIVA</div>
+            <div style='font-size:10px;color:#5A5A7A;letter-spacing:2px;text-transform:uppercase;margin-bottom:32px;'>Terret · Inventario</div>
         </div>
         """, unsafe_allow_html=True)
-        _, col, _ = st.columns([1, 2, 1])
+        _, col, _ = st.columns([1,2,1])
         with col:
-            pwd = st.text_input("Contrasena", type="password", placeholder="........")
+            pwd = st.text_input("", type="password", placeholder="Contrasena", label_visibility="collapsed")
             if st.button("ENTRAR"):
-                if pwd == st.secrets.get("APP_PASSWORD", ""):
-                    st.session_state.logged_in = True
-                    st.rerun()
+                if pwd == st.secrets.get("APP_PASSWORD",""):
+                    st.session_state.logged_in = True; st.rerun()
                 else:
                     st.error("Contrasena incorrecta.")
         st.stop()
 
 
-# ─── SHEETS ─────────────────────────────────────────────────────────────────
-
+# ── SHEETS ────────────────────────────────────────────────────────────────────
 @st.cache_resource(ttl=300)
 def conectar():
     try:
         creds = Credentials.from_service_account_info(
             dict(st.secrets["gcp_service_account"]),
-            scopes=["https://spreadsheets.google.com/feeds",
-                    "https://www.googleapis.com/auth/drive"]
-        )
+            scopes=["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"])
         return gspread.authorize(creds)
     except Exception as e:
-        st.error(f"Error Sheets: {e}")
-        return None
-
+        st.error(f"Error Sheets: {e}"); return None
 
 def get_ws(client, nombre):
     try:
         sh = client.open_by_key(SPREADSHEET_ID)
-        try:
-            return sh.worksheet(nombre)
+        try: return sh.worksheet(nombre)
         except gspread.exceptions.WorksheetNotFound:
             ws = sh.add_worksheet(title=nombre, rows=1000, cols=20)
             if nombre == HOJA_ORDENES:
-                ws.append_row(["ID","Fecha","SKU","Producto","Variante",
-                                "Cantidad","Fecha_Limite","Estado","Notas"])
+                ws.append_row(["ID","Fecha","SKU","Producto","Variante","Cantidad","Fecha_Limite","Estado","Notas"])
             return ws
     except Exception as e:
-        st.error(f"Error '{nombre}': {e}")
-        return None
-
+        st.error(f"Error '{nombre}': {e}"); return None
 
 @st.cache_data(ttl=120)
 def leer_inv(_c):
@@ -179,40 +250,32 @@ def leer_inv(_c):
     r = ws.get_all_records()
     return pd.DataFrame(r) if r else pd.DataFrame()
 
-
 @st.cache_data(ttl=60)
 def leer_ord(_c):
     ws = get_ws(_c, HOJA_ORDENES)
     if not ws: return pd.DataFrame()
     r = ws.get_all_records()
     return pd.DataFrame(r) if r else pd.DataFrame(
-        columns=["ID","Fecha","SKU","Producto","Variante",
-                 "Cantidad","Fecha_Limite","Estado","Notas"])
-
+        columns=["ID","Fecha","SKU","Producto","Variante","Cantidad","Fecha_Limite","Estado","Notas"])
 
 def guardar_orden(client, o):
     ws = get_ws(client, HOJA_ORDENES)
     if not ws: return False
     try:
         ws.append_row([o["id"],o["fecha"],o["sku"],o["producto"],o["variante"],
-                       o["cantidad"],o["fecha_limite"],"pendiente",o["notas"]])
+                       o["cantidad"],o["fecha_limite"],"pendiente",o.get("notas","")])
         return True
     except Exception as e:
-        st.error(f"Error: {e}")
-        return False
+        st.error(f"Error: {e}"); return False
 
-
-def actualizar_estado(client, oid, estado):
+def actualizar_estado_orden(client, oid, estado):
     ws = get_ws(client, HOJA_ORDENES)
     if not ws: return False
     try:
         cell = ws.find(oid)
-        if cell:
-            ws.update_cell(cell.row, 8, estado)
-            return True
+        if cell: ws.update_cell(cell.row, 8, estado); return True
     except: pass
     return False
-
 
 def nuevo_id(df):
     if df.empty or "ID" not in df.columns: return "OP-001"
@@ -220,389 +283,344 @@ def nuevo_id(df):
     return f"OP-{int(nums.max().item())+1:03d}" if not nums.empty else "OP-001"
 
 
-# ─── LOGICA ─────────────────────────────────────────────────────────────────
-
-# Umbrales — mismos que el Apps Script
-UMBRAL_REPROGRAMAR = 15   # dias de inventario: por debajo es critico
-UMBRAL_SALUDABLE   = 60   # dias de inventario: saludable
-VENTAS_MIN         = 3    # ventas 60d minimas para considerar activo
-
-def calcular_urgencia(stock, ventas60d, dias_inv):
-    """
-    Reglas exactas segun reglas_dashboard.pdf — Terret
-
-    Stock=0  y ventas=0          -> INFO     (sin actividad)
-    Stock=0  y ventas >= 10      -> CRITICO  (quiebre de stock)
-    Ventas 0-2                   -> LIQUIDAR (producto muerto)
-    Ventas >= 10 y dias < 15     -> CRITICO  (reprogramar ya)
-    Ventas >= 10 y dias 15-60    -> OK       (saludable)
-    Ventas >= 10 y dias 61-120   -> ALERTA   (sobrestock leve)
-    Ventas >= 10 y dias > 120    -> ALERTA   (reducir pedidos)
-    Ventas 3-9  y dias >= 15     -> ALERTA   (monitorear)
-    Ventas 3-9  y dias < 15      -> ALERTA   (evaluar reposicion)
-    """
-    try:
-        stock     = float(stock)
-        ventas60d = float(ventas60d)
-        dias_inv  = float(str(dias_inv)) if str(dias_inv).lower() not in ("inf","","nan") else 9999
-    except:
-        return "INFO"
-
-    # Sin actividad
-    if ventas60d == 0 and stock == 0:
-        return "INFO"
-
-    # Quiebre de stock — prioridad maxima
-    if stock == 0 and ventas60d >= 10:
-        return "CRITICO"
-
-    # Liquidar — 0 a 2 ventas en 60d (muerto o casi muerto)
-    if ventas60d <= 2:
-        return "LIQUIDAR"
-
-    # Buena rotacion (>= 10 ventas)
-    if ventas60d >= 10:
-        if dias_inv < 15:
-            return "CRITICO"   # reprogramar ya
-        if dias_inv <= 60:
-            return "OK"        # saludable — rango ideal
-        return "ALERTA"        # sobrestock leve o reducir pedidos
-
-    # Rotacion baja (3-9 ventas) — monitorear o evaluar reposicion
-    return "ALERTA"
-
-
+# ── PREPARAR ──────────────────────────────────────────────────────────────────
 def preparar(df):
     if df.empty: return df
     df = df.copy()
-
-    rename = {
-        "Stock Actual":       "Stock",
-        "Ventas 60d":         "Ventas60d",
-        "Ventas/Dia":         "VentasDia",
-        "Dias de Inventario": "DiasInv",
-        "Stock Minimo":       "StockMin",
-        "Decision":           "Decision",
-        "Prioridad":          "Prioridad",
-        "Tipo":               "Tipo",
-    }
-    rename_alt = {
-        "Ventas/Día":          "VentasDia",
-        "Días de Inventario":  "DiasInv",
-        "Stock Mínimo":        "StockMin",
-        "🧠 Decisión":         "Decision",
-    }
+    rename = {"Stock Actual":"Stock","Ventas 60d":"Ventas60d","Ventas/Dia":"VentasDia",
+              "Dias de Inventario":"DiasInv","Stock Minimo":"StockMin",
+              "Decision":"Decision","Prioridad":"Prioridad","Tipo":"Tipo"}
+    rename_alt = {"Ventas/Día":"VentasDia","Días de Inventario":"DiasInv",
+                  "Stock Mínimo":"StockMin","🧠 Decisión":"Decision"}
     df = df.rename(columns={**rename_alt, **{k:v for k,v in rename.items() if k in df.columns}})
 
     for c in list(df.columns):
-        cl = c.lower()
-        if "Decision" not in df.columns and ("decisi" in cl or "\U0001f9e0" in c):
-            df = df.rename(columns={c: "Decision"}); break
+        if "Decision" not in df.columns and ("decisi" in c.lower() or "\U0001f9e0" in c):
+            df = df.rename(columns={c:"Decision"}); break
     for c in list(df.columns):
-        cl = c.lower()
-        if "Stock" not in df.columns and "stock" in cl and "min" not in cl:
-            df = df.rename(columns={c: "Stock"}); break
+        if "Stock" not in df.columns and "stock" in c.lower() and "min" not in c.lower():
+            df = df.rename(columns={c:"Stock"}); break
     for c in list(df.columns):
-        cl = c.lower()
-        if "DiasInv" not in df.columns and ("dia" in cl or "inv" in cl) and "stock" not in cl:
-            df = df.rename(columns={c: "DiasInv"}); break
+        if "DiasInv" not in df.columns and ("dia" in c.lower() or "inv" in c.lower()) and "stock" not in c.lower():
+            df = df.rename(columns={c:"DiasInv"}); break
     for c in list(df.columns):
-        cl = c.lower()
-        if "Ventas60d" not in df.columns and "ventas" in cl and "60" in cl:
-            df = df.rename(columns={c: "Ventas60d"}); break
+        if "Ventas60d" not in df.columns and "ventas" in c.lower() and "60" in c:
+            df = df.rename(columns={c:"Ventas60d"}); break
     for c in list(df.columns):
-        cl = c.lower()
-        if "Tipo" not in df.columns and "tipo" in cl:
-            df = df.rename(columns={c: "Tipo"}); break
+        if "Tipo" not in df.columns and "tipo" in c.lower():
+            df = df.rename(columns={c:"Tipo"}); break
 
     if "Decision" not in df.columns:
-        st.error(f"No encontre columna de decision. Columnas: {list(df.columns)}")
-        return pd.DataFrame()
+        st.error(f"Columna Decision no encontrada. Columnas: {list(df.columns)}"); return pd.DataFrame()
 
-    if "Tipo" not in df.columns:     df["Tipo"] = "Sin tipo"
-    if "Ventas60d" not in df.columns: df["Ventas60d"] = 0
-    if "Stock" not in df.columns:     df["Stock"] = 0
-    if "DiasInv" not in df.columns:   df["DiasInv"] = 9999
+    for col, default in [("Tipo","Sin tipo"),("Ventas60d",0),("Stock",0),("DiasInv",9999)]:
+        if col not in df.columns: df[col] = default
 
     df["Ventas60d"] = pd.to_numeric(df["Ventas60d"], errors="coerce").fillna(0)
     df["Stock"]     = pd.to_numeric(df["Stock"],     errors="coerce").fillna(0)
-
-    # Urgencia calculada desde numeros — no desde la etiqueta del Sheet
-    df["_urg"] = df.apply(
-        lambda r: calcular_urgencia(r["Stock"], r["Ventas60d"], r["DiasInv"]),
-        axis=1
-    )
-    df["_orden"] = df["_urg"].map({"CRITICO":0,"ALERTA":1,"OK":2,"LIQUIDAR":3,"INFO":4})
-    df["_bs"]    = df["Ventas60d"] >= UMBRAL_BS
+    df["DiasInv_n"] = pd.to_numeric(df["DiasInv"],   errors="coerce").fillna(9999)
+    df["_estado"]   = df.apply(lambda r: calcular_estado(r["Stock"], r["Ventas60d"], r["DiasInv_n"]), axis=1)
+    df["_bs"]       = df["Ventas60d"] >= UMBRAL_BS
     return df
 
 
-def agrupar_por_tipo(df):
-    """Retorna dict: {tipo: [grupos_de_producto]}"""
-    if df.empty: return {}
-
+def agrupar(df, estado):
+    sub = df[df["_estado"] == estado]
+    if sub.empty: return {}
     resultado = {}
-    for tipo, df_tipo in df.groupby("Tipo", sort=True):
+    for tipo, dt in sub.groupby("Tipo", sort=True):
         grupos = []
-        for prod, g in df_tipo.groupby("Producto", sort=False):
-            g = g.sort_values("_orden")
-            peor_orden = g["_orden"].min()
-            peor_urg   = g.loc[g["_orden"]==peor_orden, "_urg"].iloc[0]
-            es_bs      = g["_bs"].any()
+        for prod, g in dt.groupby("Producto", sort=False):
+            g = g.copy()
+            g["_dias_sort"] = pd.to_numeric(g["DiasInv"], errors="coerce").fillna(9999)
+            g = g.sort_values("_dias_sort")
             grupos.append({
                 "producto":   prod,
-                "urgencia":   peor_urg,
-                "orden":      peor_orden,
-                "n_criticos": (g["_urg"]=="CRITICO").sum(),
-                "n_alertas":  (g["_urg"]=="ALERTA").sum(),
-                "es_bs":      es_bs,
+                "es_bs":      g["_bs"].any(),
                 "ventas_max": g["Ventas60d"].max(),
                 "variantes":  g,
+                "n":          len(g),
             })
-        grupos = sorted(grupos, key=lambda x: x["orden"])
+        grupos = sorted(grupos, key=lambda x: -x["ventas_max"])
         resultado[tipo] = grupos
-
     return resultado
 
 
-# ─── RENDER ─────────────────────────────────────────────────────────────────
+# ── RENDER ────────────────────────────────────────────────────────────────────
+def dias_clase(dias_int, estado):
+    if estado in ("URGENTE",):       return "vdias-rojo"
+    if estado in ("EVALUAR","LIQUIDAR"): return "vdias-amber"
+    if estado == "MONITOREAR":       return "vdias-blue"
+    if estado == "SALUDABLE":        return "vdias-green"
+    return "vdias-dim"
 
-def render_fila(row, clase, mostrar_form, ordenes_df, client):
-    var   = str(row.get("Variante", "—"))
-    stock = row.get("Stock", "—")
-    dias  = row.get("DiasInv", "—")
-    v60   = row.get("Ventas60d", "—")
-    sku   = str(row.get("SKU", "—"))
 
-    try: dias_int = int(float(str(dias)))
+def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
+    var    = str(row.get("Variante","—"))
+    stock  = row.get("Stock", 0)
+    sku    = str(row.get("SKU","—"))
+    estado = row.get("_estado","")
+    v60    = row.get("Ventas60d", 0)
+
+    try: dias_int = int(float(str(row.get("DiasInv","—"))))
     except: dias_int = None
 
-    try: v60_int = int(float(str(v60)))
-    except: v60_int = v60
-
-    color = "#FF3B30" if (isinstance(dias_int,int) and dias_int<=15) else \
-            "#FFB800" if (isinstance(dias_int,int) and dias_int<=30) else "#30D158"
-
-    st.markdown(f'<div class="{clase}">', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-    with c1:
-        st.markdown(f'<div class="talla-nombre">{var}</div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown(f'<div class="lbl">Stock</div><div style="font-size:16px;font-weight:600;">{stock} u</div>', unsafe_allow_html=True)
-    with c3:
-        dias_str = str(dias_int) if dias_int is not None else str(dias)
-        st.markdown(f'<div class="lbl">Dias</div><div style="font-family:Bebas Neue,sans-serif;font-size:22px;color:{color};">{dias_str}</div>', unsafe_allow_html=True)
-    with c4:
-        st.markdown(f'<div class="lbl">Ventas 60d</div><div style="font-size:16px;font-weight:600;">{v60_int} u</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    if mostrar_form:
-        cf1, cf2, cf3, cf4 = st.columns([3, 2, 2, 2])
-        with cf2:
-            cant = st.number_input("u", min_value=1, value=50, step=10,
-                                   key=f"c_{sku}", label_visibility="collapsed")
-        with cf3:
-            fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
-            fecha     = st.date_input("f", value=fecha_def,
-                                      key=f"f_{sku}", label_visibility="collapsed")
-        with cf4:
-            if st.button("PROGRAMAR", key=f"b_{sku}"):
-                orden = {
-                    "id": nuevo_id(ordenes_df),
-                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "sku": sku, "producto": row.get("Producto","—"),
-                    "variante": var, "cantidad": cant,
-                    "fecha_limite": str(fecha), "notas": "",
-                }
-                if guardar_orden(client, orden):
-                    st.success(f"Orden {orden['id']} - {var} - {cant} u - {fecha}")
-                    st.cache_data.clear()
-
-        st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-
-
-def render_grupo(grupo, ordenes_df, client):
-    u        = grupo["urgencia"]
-    producto = grupo["producto"]
-    nc       = grupo["n_criticos"]
-    na       = grupo["n_alertas"]
-    es_bs    = grupo["es_bs"]
-    variantes = grupo["variantes"]
-
-    icono = {"CRITICO":"🔴","ALERTA":"⚠️","OK":"✅","LIQUIDAR":"📦"}.get(u,"•")
-    resumen = ""
-    if nc: resumen += f"  -  {nc} critica{'s' if nc>1 else ''}"
-    if na: resumen += f"  -  {na} en alerta"
-    if not nc and not na: resumen = f"  -  {variantes.shape[0]} tallas OK"
-
-    bs_txt = " ⭐ BS" if es_bs else ""
-    label  = f"{icono}  {producto.upper()}{bs_txt}{resumen}"
-
-    with st.expander(label, expanded=(u == "CRITICO")):
-        urgentes = variantes[variantes["_urg"].isin(["CRITICO","ALERTA"])]
-        ok_vars  = variantes[~variantes["_urg"].isin(["CRITICO","ALERTA"])]
-
-        if not urgentes.empty:
-            for _, row in urgentes.iterrows():
-                clase = "fila-critica" if row["_urg"] == "CRITICO" else "fila-alerta"
-                render_fila(row, clase, mostrar_form=True, ordenes_df=ordenes_df, client=client)
-
-            # Programar todas a la vez
-            if len(urgentes) > 1:
-                st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-                cp1, cp2, cp3 = st.columns([2, 2, 3])
-                with cp1:
-                    cant_all = st.number_input("Cant. por talla", min_value=1, value=50, step=10,
-                                               key=f"ca_{producto}")
-                with cp2:
-                    fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
-                    fecha_all = st.date_input("Fecha limite", value=fecha_def, key=f"fa_{producto}")
-                with cp3:
-                    st.markdown('<div style="height:22px;"></div>', unsafe_allow_html=True)
-                    if st.button(f"PROGRAMAR {len(urgentes)} TALLAS A LA VEZ", key=f"ba_{producto}"):
-                        creadas = []
-                        for _, row in urgentes.iterrows():
-                            o = {
-                                "id": nuevo_id(leer_ord(client)),
-                                "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "sku": str(row.get("SKU","—")),
-                                "producto": producto,
-                                "variante": str(row.get("Variante","—")),
-                                "cantidad": cant_all,
-                                "fecha_limite": str(fecha_all),
-                                "notas": "Orden masiva",
-                            }
-                            if guardar_orden(client, o):
-                                creadas.append(o["id"])
-                        if creadas:
-                            st.success(f"{len(creadas)} ordenes creadas - {', '.join(creadas)}")
-                            st.cache_data.clear()
-
-        if not ok_vars.empty:
-            with st.expander(f"   Ver {len(ok_vars)} tallas OK"):
-                for _, row in ok_vars.iterrows():
-                    render_fila(row, "fila-ok", mostrar_form=False,
-                                ordenes_df=ordenes_df, client=client)
-
-
-def render_header(nc, na):
-    b = ""
-    if nc: b += f"<span style='background:#FF3B30;color:white;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;'>⚡ {nc} criticos</span> "
-    if na: b += f"<span style='background:#FFB800;color:#0A0A14;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;'>⚠ {na} en alerta</span>"
-    if not nc and not na: b = "<span style='background:#30D158;color:#0A0A14;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;'>Todo OK</span>"
+    dias_str = str(dias_int) if dias_int is not None else "—"
+    d_cls    = dias_clase(dias_int, estado)
+    r_cls    = "var-row-critica" if estado=="URGENTE" else "var-row-alerta" if estado=="EVALUAR" else ""
 
     st.markdown(f"""
-    <div style='display:flex;align-items:center;gap:16px;padding:8px 0 24px 0;
-                border-bottom:1px solid #1A1A2E;margin-bottom:24px;'>
-        <div style='background:#D4FF00;width:40px;height:40px;border-radius:6px;flex-shrink:0;
-                    display:flex;align-items:center;justify-content:center;
-                    font-family:Bebas Neue,sans-serif;font-size:20px;color:#0A0A14;'>LV</div>
-        <div>
-            <div style='font-family:Bebas Neue,sans-serif;font-size:24px;letter-spacing:3px;color:#E8E8F0;line-height:1;'>LINEA VIVA</div>
-            <div style='font-size:10px;color:#6B6B8A;letter-spacing:2px;text-transform:uppercase;'>Reposicion - Terret</div>
+    <div class="var-row {r_cls}">
+        <div class="vname">{var}</div>
+        <div class="vstock">{int(stock)} u</div>
+        <div class="{d_cls}">{dias_str}</div>
+        <div style="font-size:12px;color:var(--dim);">{int(v60)} u</div>
+    </div>""", unsafe_allow_html=True)
+
+    if mostrar_form:
+        cf1, cf2, cf3, cf4 = st.columns([2,2,2,2])
+        with cf1:
+            cant = st.number_input("Cantidad", min_value=1, value=50, step=10,
+                                   key=f"c_{key_prefix}{sku}")
+        with cf2:
+            fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
+            fecha = st.date_input("Fecha limite", value=fecha_def,
+                                  key=f"f_{key_prefix}{sku}")
+        with cf3:
+            notas = st.text_input("Notas", placeholder="Opcional",
+                                  key=f"n_{key_prefix}{sku}")
+        with cf4:
+            st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+            if st.button("PROGRAMAR", key=f"b_{key_prefix}{sku}"):
+                orden = {"id": nuevo_id(ordenes_df), "sku": sku,
+                         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                         "producto": row.get("Producto","—"), "variante": var,
+                         "cantidad": cant, "fecha_limite": str(fecha), "notas": notas}
+                if guardar_orden(client, orden):
+                    st.success(f"✅ {orden['id']} — {var} · {cant} u · {fecha}")
+                    st.cache_data.clear()
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+
+def render_producto(grupo, estado, mostrar_form, ordenes_df, client):
+    prod      = grupo["producto"]
+    es_bs     = grupo["es_bs"]
+    variantes = grupo["variantes"]
+    n         = grupo["n"]
+    bs_tag    = '<span class="tag tag-bs">⭐ BS</span>' if es_bs else ""
+
+    st.markdown(f"""
+    <div class="prod-card">
+        <div class="prod-header">
+            <div class="prod-nombre">{prod.upper()}</div>
+            <div style="display:flex;gap:6px;align-items:center;">
+                {bs_tag}
+                <span style="font-size:11px;color:var(--dim);">{n} talla{"s" if n>1 else ""}</span>
+            </div>
         </div>
-        <div style='margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;'>{b}</div>
-    </div>
-    """, unsafe_allow_html=True)
+        <div class="var-header">
+            <div>TALLA / VARIANTE</div><div>STOCK</div><div>DIAS INV.</div><div>VENTAS 60D</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    for _, row in variantes.iterrows():
+        render_variante(row, mostrar_form, ordenes_df, client, key_prefix=f"{prod[:6]}_")
+
+    if mostrar_form and len(variantes) > 1:
+        st.markdown('<div class="prog-panel">', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:10px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">Programar todas — {len(variantes)} tallas</div>', unsafe_allow_html=True)
+        pc1, pc2, pc3 = st.columns([2,2,3])
+        with pc1:
+            cant_all = st.number_input("Cant. por talla", min_value=1, value=50, step=10, key=f"ca_{prod}")
+        with pc2:
+            fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
+            fecha_all = st.date_input("Fecha limite", value=fecha_def, key=f"fa_{prod}")
+        with pc3:
+            st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+            if st.button(f"PROGRAMAR {len(variantes)} TALLAS", key=f"ba_{prod}"):
+                creadas = []
+                for _, row in variantes.iterrows():
+                    o = {"id": nuevo_id(leer_ord(client)),
+                         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                         "sku": str(row.get("SKU","—")), "producto": prod,
+                         "variante": str(row.get("Variante","—")),
+                         "cantidad": cant_all, "fecha_limite": str(fecha_all), "notas": "Orden masiva"}
+                    if guardar_orden(client, o): creadas.append(o["id"])
+                if creadas:
+                    st.success(f"✅ {len(creadas)} ordenes — {', '.join(creadas)}")
+                    st.cache_data.clear()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
 
 
-# ─── VISTAS ──────────────────────────────────────────────────────────────────
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
+def render_sidebar(conteos):
+    with st.sidebar:
+        # Logo
+        st.markdown("""
+        <div style='padding:20px 4px 16px 4px;border-bottom:1px solid #1C1C2E;margin-bottom:12px;'>
+            <div style='display:flex;align-items:center;gap:10px;'>
+                <div style='background:#D4FF00;width:30px;height:30px;border-radius:4px;
+                            display:flex;align-items:center;justify-content:center;
+                            font-family:Bebas Neue,sans-serif;font-size:15px;color:#07070F;flex-shrink:0;'>LV</div>
+                <div>
+                    <div style='font-family:Bebas Neue,sans-serif;font-size:16px;letter-spacing:2px;color:#E2E2F0;line-height:1;'>LINEA VIVA</div>
+                    <div style='font-size:9px;color:#5A5A7A;letter-spacing:1px;text-transform:uppercase;'>Terret · Inventario</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-def vista_dashboard(df, ordenes_df, client):
-    if df.empty:
-        st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
+        vista_actual = st.session_state.get("vista","URGENTE")
+
+        for estado, cfg in ESTADOS.items():
+            cnt   = conteos.get(estado, 0)
+            active = vista_actual == estado
+
+            # Color del badge segun urgencia
+            badge_color = {"URGENTE":"#FF3B30","EVALUAR":"#FFB800"}.get(estado, "#3A3A5C")
+            badge_text  = {"URGENTE":"white","EVALUAR":"#07070F"}.get(estado, "#5A5A7A")
+            label_color = "#D4FF00" if active else "#E2E2F0"
+            bg          = "background:rgba(212,255,0,0.08);" if active else ""
+
+            col_a, col_b = st.columns([4, 1])
+            with col_a:
+                st.markdown(f"""
+                <div style='display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:6px;{bg}'>
+                    <span style='font-size:14px;'>{cfg["icon"]}</span>
+                    <span style='font-family:DM Sans,sans-serif;font-size:13px;font-weight:500;color:{label_color};'>{cfg["label"]}</span>
+                </div>""", unsafe_allow_html=True)
+            with col_b:
+                st.markdown(f"""
+                <div style='display:flex;align-items:center;justify-content:center;height:100%;'>
+                    <span style='background:{badge_color};color:{badge_text};
+                                 font-family:Bebas Neue,sans-serif;font-size:13px;
+                                 padding:1px 8px;border-radius:20px;min-width:28px;text-align:center;'>
+                        {cnt}
+                    </span>
+                </div>""", unsafe_allow_html=True)
+
+            # Boton invisible sobre toda la fila
+            if st.button(f"ir_{estado}", key=f"nav_{estado}", label_visibility="collapsed"):
+                st.session_state.vista = estado
+                st.rerun()
+
+        st.markdown("<div style='border-top:1px solid #1C1C2E;margin:12px 0;'></div>", unsafe_allow_html=True)
+
+        ordenes_active = vista_actual == "ORDENES"
+        col_a, col_b = st.columns([4,1])
+        with col_a:
+            bg_ord = "background:rgba(212,255,0,0.08);" if ordenes_active else ""
+            lc_ord = "#D4FF00" if ordenes_active else "#E2E2F0"
+            st.markdown(f"""
+            <div style='display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:6px;{bg_ord}'>
+                <span style='font-size:14px;'>📋</span>
+                <span style='font-family:DM Sans,sans-serif;font-size:13px;font-weight:500;color:{lc_ord};'>Ordenes</span>
+            </div>""", unsafe_allow_html=True)
+        with col_b:
+            st.markdown("")
+        if st.button("ir_ordenes", key="nav_ordenes", label_visibility="collapsed"):
+            st.session_state.vista = "ORDENES"; st.rerun()
+
+        st.markdown(f"""
+        <div style='margin-top:24px;font-size:9px;color:#2A2A3E;letter-spacing:1px;padding:0 4px;'>
+            {datetime.now().strftime('%d/%m/%Y %H:%M')}
+        </div>""", unsafe_allow_html=True)
+
+
+# ── VISTAS ────────────────────────────────────────────────────────────────────
+def vista_estado(df, ordenes_df, client, estado):
+    cfg = ESTADOS[estado]
+    mostrar_form = estado in ("URGENTE","EVALUAR")
+    color = cfg["color"]
+
+    # Banner de seccion
+    st.markdown(f"""
+    <div class="banner" style="border-left:4px solid {color};">
+        <div class="banner-icon">{cfg["icon"]}</div>
+        <div>
+            <div class="banner-title" style="color:{color};">{cfg["label"].upper()}</div>
+            <div class="banner-desc">{cfg["desc"]}</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    sub = df[df["_estado"] == estado]
+
+    if sub.empty:
+        st.markdown(f"""
+        <div style='text-align:center;padding:60px 0;color:var(--dim);'>
+            <div style='font-size:36px;margin-bottom:12px;'>{cfg["icon"]}</div>
+            <div style='font-family:Bebas Neue,sans-serif;font-size:18px;letter-spacing:2px;'>
+                Sin productos en este estado
+            </div>
+        </div>""", unsafe_allow_html=True)
         return
 
-    df_p = preparar(df)
-    if df_p.empty: return
+    # Metricas rapidas
+    n_skus  = len(sub)
+    n_prods = sub["Producto"].nunique()
+    n_tipos = sub["Tipo"].nunique()
+    c1, c2, c3 = st.columns(3)
+    with c1: st.metric("SKUs", n_skus)
+    with c2: st.metric("Productos", n_prods)
+    with c3: st.metric("Categorias", n_tipos)
 
-    tipos_grupos = agrupar_por_tipo(df_p)
-    todos_grupos = [g for gs in tipos_grupos.values() for g in gs]
-
-    total_c = sum(g["n_criticos"] for g in todos_grupos)
-    total_a = sum(g["n_alertas"]  for g in todos_grupos)
-    prods_u = sum(1 for g in todos_grupos if g["urgencia"] in ["CRITICO","ALERTA"])
-    pend    = (ordenes_df["Estado"]=="pendiente").sum() if "Estado" in ordenes_df.columns else 0
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: st.metric("SKUs CRITICOS",      total_c)
-    with c2: st.metric("SKUs EN ALERTA",     total_a)
-    with c3: st.metric("PRODUCTOS URGENTES", prods_u)
-    with c4: st.metric("ORDENES ACTIVAS",    pend)
-
-    # Boton alerta email
-    if total_c or total_a:
-        lista = "\n".join([
-            f"- {g['producto']}: {g['n_criticos']} criticas, {g['n_alertas']} en alerta"
-            for g in todos_grupos if g["urgencia"] in ["CRITICO","ALERTA"]
-        ])
-        s = urllib.parse.quote("LINEA VIVA - Productos urgentes Terret")
-        b = urllib.parse.quote(f"Productos urgentes:\n\n{lista}\n\nEntra a Linea Viva.")
-        st.markdown(
-            f'<div style="margin:16px 0 4px 0;">'
-            f'<a href="mailto:{ALERTA_EMAIL}?subject={s}&body={b}">'
-            f'<button style="background:#D4FF00;color:#0A0A14;font-family:Bebas Neue,sans-serif;'
-            f'font-size:13px;letter-spacing:2px;border:none;border-radius:4px;'
-            f'padding:9px 20px;cursor:pointer;">ENVIAR ALERTA</button></a></div>',
-            unsafe_allow_html=True
-        )
-
-    st.markdown("---")
-
-    # Filtros
-    col_f1, col_f2, col_f3 = st.columns([2, 2, 3])
-    with col_f1:
-        filtro_urg = st.radio("Ver", ["Solo urgentes", "Todos"], horizontal=True)
-    with col_f2:
-        filtro_bs  = st.radio("Tipo", ["Todos", "Solo best sellers"], horizontal=True)
-    with col_f3:
+    # Barra de herramientas
+    t1, t2 = st.columns([3, 2])
+    with t1:
         buscar = st.text_input("", placeholder="Buscar producto...", label_visibility="collapsed")
+    with t2:
+        tipos_disp = sorted(sub["Tipo"].dropna().unique().tolist())
+        tipo_sel = st.selectbox("", ["Todas las categorias"] + tipos_disp, label_visibility="collapsed")
 
-    # Filtro de tipos de producto (tabs si hay varios)
-    tipos_disponibles = sorted(tipos_grupos.keys())
-    if len(tipos_disponibles) > 1:
-        tipo_sel = st.selectbox("Categoria", ["Todos los tipos"] + tipos_disponibles)
-    else:
-        tipo_sel = "Todos los tipos"
+    # Alerta email para urgentes
+    if estado == "URGENTE":
+        prods_u = sub["Producto"].unique()
+        lista = "\n".join([f"- {p}" for p in prods_u[:15]])
+        s = urllib.parse.quote("URGENTE: Reposicion Terret")
+        b = urllib.parse.quote(f"Productos urgentes ({len(prods_u)}):\n\n{lista}\n\nEntra a Linea Viva.")
+        st.markdown(
+            f'<a href="mailto:{ALERTA_EMAIL}?subject={s}&body={b}">'
+            f'<button style="background:#FF3B30;color:white;font-family:Bebas Neue,sans-serif;'
+            f'font-size:12px;letter-spacing:2px;border:none;border-radius:4px;'
+            f'padding:7px 16px;cursor:pointer;margin-bottom:4px;">'
+            f'📧 ENVIAR ALERTA — {len(prods_u)} productos urgentes</button></a>',
+            unsafe_allow_html=True)
 
-    # Aplicar filtros y renderizar
-    sin_resultados = True
-    for tipo, grupos in sorted(tipos_grupos.items()):
-        if tipo_sel != "Todos los tipos" and tipo != tipo_sel:
-            continue
+    # Agrupar y filtrar
+    grupos_tipo = agrupar(df, estado)
 
-        grupos_f = grupos
-        if filtro_urg == "Solo urgentes":
-            grupos_f = [g for g in grupos_f if g["urgencia"] in ["CRITICO","ALERTA"]]
-        if filtro_bs == "Solo best sellers":
-            grupos_f = [g for g in grupos_f if g["es_bs"]]
-        if buscar:
-            grupos_f = [g for g in grupos_f if buscar.lower() in g["producto"].lower()]
+    if tipo_sel != "Todas las categorias":
+        grupos_tipo = {k:v for k,v in grupos_tipo.items() if k == tipo_sel}
+    if buscar:
+        grupos_tipo = {t:[g for g in gs if buscar.lower() in g["producto"].lower()]
+                       for t,gs in grupos_tipo.items()}
+        grupos_tipo = {t:gs for t,gs in grupos_tipo.items() if gs}
 
-        if not grupos_f:
-            continue
+    if not grupos_tipo:
+        st.info("Sin resultados.")
+        return
 
-        sin_resultados = False
-
-        # Header de tipo
-        st.markdown(f'<div class="tipo-header">{tipo.upper()}</div>', unsafe_allow_html=True)
-        for g in grupos_f:
-            render_grupo(g, ordenes_df, client)
-
-    if sin_resultados:
-        st.success("Sin productos urgentes con los filtros actuales.")
+    for tipo, grupos in grupos_tipo.items():
+        st.markdown(f'<div class="tipo-sep">{tipo.upper()} &nbsp;·&nbsp; {len(grupos)} productos</div>',
+                    unsafe_allow_html=True)
+        for grupo in grupos:
+            render_producto(grupo, estado, mostrar_form, ordenes_df, client)
 
 
 def vista_ordenes(ordenes_df, client):
-    st.markdown("### ORDENES DE PRODUCCION")
+    st.markdown("""
+    <div style='font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:3px;
+                color:#E2E2F0;margin-bottom:16px;'>ORDENES DE PRODUCCION</div>""",
+                unsafe_allow_html=True)
 
     if ordenes_df.empty or len(ordenes_df.columns) < 2:
-        st.info("No hay ordenes aun.")
-        return
+        st.info("No hay ordenes aun."); return
 
     c1, c2 = st.columns(2)
     with c1:
-        opts   = ["Todos"] + list(ordenes_df["Estado"].dropna().unique()) if "Estado" in ordenes_df.columns else ["Todos"]
+        opts = ["Todos"] + list(ordenes_df["Estado"].dropna().unique()) if "Estado" in ordenes_df.columns else ["Todos"]
         filtro = st.selectbox("Estado", opts)
     with c2:
         buscar = st.text_input("Buscar", placeholder="Producto, SKU...")
@@ -615,46 +633,55 @@ def vista_ordenes(ordenes_df, client):
         df_f = df_f[mask]
 
     st.dataframe(df_f, use_container_width=True, hide_index=True)
-
     st.markdown("---")
-    st.markdown("#### ACTUALIZAR ESTADO")
+
     if "ID" in ordenes_df.columns and not ordenes_df["ID"].dropna().empty:
+        st.markdown('<div style="font-size:13px;font-weight:600;margin-bottom:8px;">Actualizar estado</div>',
+                    unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1: oid    = st.selectbox("Orden", ordenes_df["ID"].dropna().tolist())
         with c2: estado = st.selectbox("Estado", ["pendiente","en-proceso","completado","cancelado"])
         with c3:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("ACTUALIZAR"):
-                if actualizar_estado(client, oid, estado):
-                    st.success(f"{oid} - {estado}")
-                    st.cache_data.clear()
+                if actualizar_estado_orden(client, oid, estado):
+                    st.success(f"✅ {oid} → {estado}"); st.cache_data.clear()
 
 
-# ─── MAIN ────────────────────────────────────────────────────────────────────
-
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
     check_login()
 
     client  = conectar()
-    df      = leer_inv(client) if client else pd.DataFrame()
+    df_raw  = leer_inv(client) if client else pd.DataFrame()
     ordenes = leer_ord(client) if client else pd.DataFrame()
+    df      = preparar(df_raw) if not df_raw.empty else pd.DataFrame()
 
-    df_p   = preparar(df) if not df.empty else df
-    grupos = [g for gs in agrupar_por_tipo(df_p).values() for g in gs] if not df_p.empty and "_urg" in df_p.columns else []
-    nc     = sum(g["n_criticos"] for g in grupos)
-    na     = sum(g["n_alertas"]  for g in grupos)
+    # Conteos por estado (en productos unicos)
+    conteos = {}
+    if not df.empty:
+        for estado in ESTADOS:
+            conteos[estado] = df[df["_estado"]==estado]["Producto"].nunique()
 
-    render_header(nc, na)
+    if "vista" not in st.session_state:
+        st.session_state.vista = "URGENTE"
 
-    tab1, tab2 = st.tabs(["DASHBOARD", "ORDENES"])
-    with tab1: vista_dashboard(df, ordenes, client)
-    with tab2: vista_ordenes(ordenes, client)
+    render_sidebar(conteos)
+
+    vista = st.session_state.get("vista","URGENTE")
+
+    if vista == "ORDENES":
+        vista_ordenes(ordenes, client)
+    elif vista in ESTADOS:
+        if df.empty:
+            st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
+        else:
+            vista_estado(df, ordenes, client, vista)
 
     st.markdown(
-        f"<div style='text-align:center;font-size:11px;color:#2A2A3E;margin-top:40px;'>"
-        f"LINEA VIVA - TERRET - {datetime.now().strftime('%d.%m.%Y %H:%M')}</div>",
-        unsafe_allow_html=True
-    )
+        f"<div style='font-size:10px;color:#1C1C2E;text-align:right;margin-top:40px;'>"
+        f"LINEA VIVA · TERRET · {datetime.now().strftime('%d.%m.%Y %H:%M')}</div>",
+        unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
