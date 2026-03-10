@@ -376,12 +376,16 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
     d_cls    = dias_clase(dias_int, estado)
     r_cls    = "var-row-critica" if estado=="URGENTE" else "var-row-alerta" if estado=="EVALUAR" else ""
 
+    # Fila completamente cerrada — sin elementos Streamlit dentro del div
+    bg_fila = "rgba(255,59,48,0.04)" if estado=="URGENTE" else "rgba(255,184,0,0.03)" if estado=="EVALUAR" else "transparent"
     st.markdown(f"""
-    <div class="var-row {r_cls}">
-        <div class="vname">{var}</div>
-        <div class="vstock">{int(stock)} u</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr;gap:8px;
+                padding:8px 14px;border-top:1px solid #1C1C2E;
+                align-items:center;font-size:13px;background:{bg_fila};">
+        <div style="font-weight:500;">{var}</div>
+        <div style="font-family:DM Mono,monospace;color:#5A5A7A;font-size:12px;">{int(stock)} u</div>
         <div class="{d_cls}">{dias_str}</div>
-        <div style="font-size:12px;color:var(--dim);">{int(v60)} u</div>
+        <div style="font-size:12px;color:#5A5A7A;">{int(v60)} u</div>
     </div>""", unsafe_allow_html=True)
 
     if mostrar_form:
@@ -414,51 +418,75 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client):
     es_bs     = grupo["es_bs"]
     variantes = grupo["variantes"]
     n         = grupo["n"]
-    bs_tag    = '<span class="tag tag-bs">⭐ BS</span>' if es_bs else ""
 
-    st.markdown(f"""
-    <div class="prod-card">
-        <div class="prod-header">
-            <div class="prod-nombre">{prod.upper()}</div>
+    # Contenedor con borde — todo dentro del mismo bloque, sin divs abiertos entre llamadas Streamlit
+    with st.container():
+        # Inyectar estilos de borde via JS trick: usamos un st.container y CSS por key unico
+        prod_key = prod.replace(" ","_").replace("/","")[:20]
+        color_borde = {"URGENTE":"#FF3B30","EVALUAR":"#FFB800","LIQUIDAR":"#FF6B35",
+                       "MONITOREAR":"#4488FF","SALUDABLE":"#00C853"}.get(estado, "#3A3A5C")
+
+        bs_tag = "⭐ BS  " if es_bs else ""
+        tallas_txt = f"{n} talla" + ("s" if n>1 else "")
+
+        # Header completo y cerrado
+        st.markdown(f"""
+        <div style="background:#0F0F1A;border:1px solid #1C1C2E;border-left:3px solid {color_borde};
+                    border-radius:8px 8px 0 0;padding:12px 14px;
+                    display:flex;align-items:center;gap:10px;">
+            <div style="font-weight:600;font-size:14px;flex:1;line-height:1.2;">{prod.upper()}</div>
             <div style="display:flex;gap:6px;align-items:center;">
-                {bs_tag}
-                <span style="font-size:11px;color:var(--dim);">{n} talla{"s" if n>1 else ""}</span>
+                {"<span style=\"background:rgba(212,255,0,0.12);color:#D4FF00;font-family:DM Mono,monospace;font-size:9px;padding:2px 8px;border-radius:3px;\">⭐ BS</span>" if es_bs else ""}
+                <span style="font-size:11px;color:#5A5A7A;">{tallas_txt}</span>
             </div>
         </div>
-        <div class="var-header">
+        <div style="background:#0F0F1A;border:1px solid #1C1C2E;border-top:none;border-left:3px solid {color_borde};
+                    display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr;gap:8px;
+                    padding:5px 14px;font-size:9px;color:#5A5A7A;letter-spacing:1.5px;text-transform:uppercase;font-family:DM Mono,monospace;">
             <div>TALLA / VARIANTE</div><div>STOCK</div><div>DIAS INV.</div><div>VENTAS 60D</div>
-        </div>
-    </div>""", unsafe_allow_html=True)
+        </div>""", unsafe_allow_html=True)
 
-    for _, row in variantes.iterrows():
-        render_variante(row, mostrar_form, ordenes_df, client, key_prefix=f"{prod[:6]}_")
+        # Filas de variantes
+        for _, row in variantes.iterrows():
+            render_variante(row, mostrar_form, ordenes_df, client, key_prefix=f"{prod_key}_")
 
-    if mostrar_form and len(variantes) > 1:
-        st.markdown('<div class="prog-panel">', unsafe_allow_html=True)
-        st.markdown(f'<div style="font-size:10px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">Programar todas — {len(variantes)} tallas</div>', unsafe_allow_html=True)
-        pc1, pc2, pc3 = st.columns([2,2,3])
-        with pc1:
-            cant_all = st.number_input("Cant. por talla", min_value=1, value=50, step=10, key=f"ca_{prod}")
-        with pc2:
-            fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
-            fecha_all = st.date_input("Fecha limite", value=fecha_def, key=f"fa_{prod}")
-        with pc3:
-            st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
-            if st.button(f"PROGRAMAR {len(variantes)} TALLAS", key=f"ba_{prod}"):
-                creadas = []
-                for _, row in variantes.iterrows():
-                    o = {"id": nuevo_id(leer_ord(client)),
-                         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                         "sku": str(row.get("SKU","—")), "producto": prod,
-                         "variante": str(row.get("Variante","—")),
-                         "cantidad": cant_all, "fecha_limite": str(fecha_all), "notas": "Orden masiva"}
-                    if guardar_orden(client, o): creadas.append(o["id"])
-                if creadas:
-                    st.success(f"✅ {len(creadas)} ordenes — {', '.join(creadas)}")
-                    st.cache_data.clear()
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Cierre visual de la tarjeta
+        st.markdown(f"""
+        <div style="background:#0F0F1A;border:1px solid #1C1C2E;border-top:none;
+                    border-left:3px solid {color_borde};border-radius:0 0 8px 8px;height:6px;"></div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
+        # Panel programar todas
+        if mostrar_form and len(variantes) > 1:
+            st.markdown(f"""
+            <div style="background:rgba(212,255,0,0.03);border:1px solid rgba(212,255,0,0.12);
+                        border-radius:6px;padding:10px 14px 4px 14px;margin-top:4px;">
+                <div style="font-size:10px;color:#5A5A7A;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">
+                    Programar todas — {len(variantes)} tallas
+                </div>
+            </div>""", unsafe_allow_html=True)
+            pc1, pc2, pc3 = st.columns([2,2,3])
+            with pc1:
+                cant_all = st.number_input("Cant. por talla", min_value=1, value=50, step=10, key=f"ca_{prod_key}")
+            with pc2:
+                fecha_def = (datetime.today() + pd.Timedelta(days=FABRICACION_DIAS)).date()
+                fecha_all = st.date_input("Fecha limite", value=fecha_def, key=f"fa_{prod_key}")
+            with pc3:
+                st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+                if st.button(f"PROGRAMAR {len(variantes)} TALLAS", key=f"ba_{prod_key}"):
+                    creadas = []
+                    for _, row in variantes.iterrows():
+                        o = {"id": nuevo_id(leer_ord(client)),
+                             "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                             "sku": str(row.get("SKU","—")), "producto": prod,
+                             "variante": str(row.get("Variante","—")),
+                             "cantidad": cant_all, "fecha_limite": str(fecha_all), "notas": "Orden masiva"}
+                        if guardar_orden(client, o): creadas.append(o["id"])
+                    if creadas:
+                        st.success(f"✅ {len(creadas)} ordenes — {chr(44).join(creadas)}")
+                        st.cache_data.clear()
+
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
