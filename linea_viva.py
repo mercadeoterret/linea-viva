@@ -357,6 +357,54 @@ def color_borde(estado):
     }.get(estado, "#3A3A5C")
 
 
+# ── SUGERENCIA DE REPOSICION ─────────────────────────────────────────────────
+
+DIAS_OBJETIVO   = 60   # meta de cobertura en dias (estandar moda deportiva)
+DIAS_FABRICACION = 20  # tiempo de entrega del proveedor
+MULTIPLO        = 6    # redondear al multiplo mas cercano (media docena)
+
+def sugerir_cantidad(stock, ventas60d, dias_inv, estado):
+    """
+    Calcula cuantas unidades pedir para llegar al objetivo de cobertura,
+    descontando el stock actual y el consumo durante fabricacion.
+    Retorna (cantidad_sugerida, explicacion)
+    """
+    try:
+        s  = float(stock)
+        v  = float(ventas60d)
+        d  = float(dias_inv) if str(dias_inv).lower() not in ("inf","nan","") else 9999
+    except:
+        return 0, "Sin datos"
+
+    if estado == "LIQUIDAR":
+        return 0, "Liquidar — no reponer"
+
+    if estado == "SIN_ACTIVIDAD":
+        return 0, "Sin actividad — no reponer"
+
+    if v == 0:
+        return 0, "Sin ventas — no reponer"
+
+    ventas_dia = v / 60.0
+
+    # Stock que quedara cuando llegue el pedido
+    stock_al_recibir = max(0, s - ventas_dia * DIAS_FABRICACION)
+
+    # Unidades para llegar al objetivo desde ese momento
+    necesarias = (ventas_dia * DIAS_OBJETIVO) - stock_al_recibir
+
+    if necesarias <= 0:
+        cobertura = int(d)
+        return 0, "Stock OK — " + str(cobertura) + " dias de cobertura"
+
+    # Redondear al multiplo de MULTIPLO mas cercano por arriba
+    cantidad = int((int(necesarias) // MULTIPLO + 1) * MULTIPLO) if necesarias % MULTIPLO else int(necesarias)
+    cantidad = max(MULTIPLO, cantidad)
+
+    dias_con_pedido = int((s + cantidad) / ventas_dia) if ventas_dia > 0 else 9999
+    return cantidad, str(dias_con_pedido) + " dias con pedido"
+
+
 # ── RENDER VARIANTE ──────────────────────────────────────────────────────────
 
 def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
@@ -399,12 +447,31 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
     if not mostrar_form:
         return
 
+    # Calcular sugerencia inteligente
+    try:
+        dias_n = float(str(row.get("DiasInv_n", row.get("DiasInv", 9999))))
+    except:
+        dias_n = 9999
+    sugerencia, sug_label = sugerir_cantidad(stock, v60, dias_n, estado)
+    valor_default = max(1, sugerencia) if sugerencia > 0 else 12
+
+    # Mostrar chip de sugerencia
+    sug_color = "#FF3B30" if estado == "URGENTE" else "#FFB800" if estado == "EVALUAR" else "#4488FF"
+    sug_texto = str(sugerencia) + " u sugeridas · " + sug_label if sugerencia > 0 else sug_label
+    st.markdown(
+        "<div style='font-size:10px;color:" + sug_color + ";font-family:DM Mono,monospace;"
+        "letter-spacing:1px;padding:3px 14px 6px 14px;background:rgba(0,0,0,0.2);'>"
+        "⟶ " + sug_texto +
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
     # Key unica por widget — combina prefix + sku + uuid corto
     _uk = key_prefix + sku + "_" + uuid.uuid4().hex[:6]
     cf1, cf2, cf3, cf4 = st.columns([2, 2, 2, 2])
     with cf1:
         cant = st.number_input(
-            "Cantidad", min_value=1, value=50, step=10,
+            "Cantidad", min_value=1, value=valor_default, step=MULTIPLO,
             key="c_" + _uk,
         )
     with cf2:
@@ -519,11 +586,21 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
             "</div>",
             unsafe_allow_html=True,
         )
+        # Sugerencia promedio de todas las variantes
+        sug_valores = []
+        for _, vrow in variantes.iterrows():
+            try: dias_vn = float(str(vrow.get("DiasInv_n", vrow.get("DiasInv", 9999))))
+            except: dias_vn = 9999
+            sv, _ = sugerir_cantidad(vrow.get("Stock",0), vrow.get("Ventas60d",0), dias_vn, estado)
+            if sv > 0: sug_valores.append(sv)
+        sug_todas = int(sum(sug_valores) / len(sug_valores)) if sug_valores else 12
+        sug_todas = max(MULTIPLO, (sug_todas // MULTIPLO) * MULTIPLO)
+
         _pk = prod_key + "_" + uuid.uuid4().hex[:6]
         pc1, pc2, pc3 = st.columns([2, 2, 3])
         with pc1:
             cant_all = st.number_input(
-                "Cant. por talla", min_value=1, value=50, step=10,
+                "Cantidad por talla", min_value=1, value=sug_todas, step=MULTIPLO,
                 key="ca_" + _pk,
             )
         with pc2:
