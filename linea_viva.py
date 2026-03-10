@@ -222,20 +222,51 @@ def nuevo_id(df):
 
 # ─── LOGICA ─────────────────────────────────────────────────────────────────
 
-def get_urgencia(decision):
-    d = str(decision).upper()
-    if "QUIEBRE" in d or "REPROGRAMAR" in d: return "CRITICO"
-    if "EVALUAR" in d or "MONITOREAR" in d:  return "ALERTA"
-    if "SALUDABLE" in d:                      return "OK"
-    if "LIQUIDAR" in d:                       return "LIQUIDAR"
-    return "INFO"
+# Umbrales — mismos que el Apps Script
+UMBRAL_REPROGRAMAR = 15   # dias de inventario: por debajo es critico
+UMBRAL_SALUDABLE   = 60   # dias de inventario: saludable
+VENTAS_MIN         = 3    # ventas 60d minimas para considerar activo
+
+def calcular_urgencia(stock, ventas60d, dias_inv):
+    """
+    Recalcula urgencia desde los numeros crudos.
+    No confiar en la etiqueta del Sheet — puede estar desactualizada o corrupta.
+    
+    Reglas:
+    - Sin ventas y sin stock            → INFO (producto inactivo)
+    - Stock = 0 y tiene ventas          → CRITICO (quiebre)
+    - Ventas bajas (<3/60d) y con stock → LIQUIDAR (producto lento)
+    - Dias <= 15 y tiene ventas         → CRITICO (reprogramar ya)
+    - Dias <= 60 y tiene ventas         → OK (saludable)
+    - Dias > 60 y tiene ventas          → OK (holgado)
+    """
+    try:
+        stock     = float(stock)
+        ventas60d = float(ventas60d)
+        dias_inv  = float(dias_inv) if str(dias_inv).lower() not in ("inf", "", "nan") else 9999
+    except:
+        return "INFO"
+
+    if ventas60d == 0 and stock == 0:
+        return "INFO"
+    if stock == 0 and ventas60d >= VENTAS_MIN:
+        return "CRITICO"
+    if ventas60d < VENTAS_MIN and stock > 0:
+        return "LIQUIDAR"
+    if ventas60d >= VENTAS_MIN and dias_inv <= UMBRAL_REPROGRAMAR:
+        return "CRITICO"
+    # Con inventario para mas de 30 dias y ventas activas → OK sin importar etiqueta
+    if ventas60d >= VENTAS_MIN and dias_inv > 30:
+        return "OK"
+    if ventas60d >= VENTAS_MIN and dias_inv <= UMBRAL_SALUDABLE:
+        return "ALERTA"
+    return "OK"
 
 
 def preparar(df):
     if df.empty: return df
     df = df.copy()
 
-    # Nombres exactos del Apps Script actualizado
     rename = {
         "Stock Actual":       "Stock",
         "Ventas 60d":         "Ventas60d",
@@ -246,7 +277,6 @@ def preparar(df):
         "Prioridad":          "Prioridad",
         "Tipo":               "Tipo",
     }
-    # Tambien intentar nombres con tildes por si el sheet los tiene
     rename_alt = {
         "Ventas/Día":          "VentasDia",
         "Días de Inventario":  "DiasInv",
@@ -255,7 +285,6 @@ def preparar(df):
     }
     df = df.rename(columns={**rename_alt, **{k:v for k,v in rename.items() if k in df.columns}})
 
-    # Fallback por patron
     for c in list(df.columns):
         cl = c.lower()
         if "Decision" not in df.columns and ("decisi" in cl or "\U0001f9e0" in c):
@@ -278,19 +307,24 @@ def preparar(df):
             df = df.rename(columns={c: "Tipo"}); break
 
     if "Decision" not in df.columns:
-        st.error(f"No encontre columna de decision. Columnas disponibles: {list(df.columns)}")
+        st.error(f"No encontre columna de decision. Columnas: {list(df.columns)}")
         return pd.DataFrame()
 
-    # Columnas que pueden no existir aun
-    if "Tipo" not in df.columns:
-        df["Tipo"] = "Sin tipo"
-    if "Ventas60d" not in df.columns:
-        df["Ventas60d"] = 0
+    if "Tipo" not in df.columns:     df["Tipo"] = "Sin tipo"
+    if "Ventas60d" not in df.columns: df["Ventas60d"] = 0
+    if "Stock" not in df.columns:     df["Stock"] = 0
+    if "DiasInv" not in df.columns:   df["DiasInv"] = 9999
 
     df["Ventas60d"] = pd.to_numeric(df["Ventas60d"], errors="coerce").fillna(0)
-    df["_urg"]      = df["Decision"].apply(get_urgencia)
-    df["_orden"]    = df["_urg"].map({"CRITICO":0,"ALERTA":1,"OK":2,"LIQUIDAR":3,"INFO":4})
-    df["_bs"]       = df["Ventas60d"] >= UMBRAL_BS  # True = best seller
+    df["Stock"]     = pd.to_numeric(df["Stock"],     errors="coerce").fillna(0)
+
+    # Urgencia calculada desde numeros — no desde la etiqueta del Sheet
+    df["_urg"] = df.apply(
+        lambda r: calcular_urgencia(r["Stock"], r["Ventas60d"], r["DiasInv"]),
+        axis=1
+    )
+    df["_orden"] = df["_urg"].map({"CRITICO":0,"ALERTA":1,"OK":2,"LIQUIDAR":3,"INFO":4})
+    df["_bs"]    = df["Ventas60d"] >= UMBRAL_BS
     return df
 
 
