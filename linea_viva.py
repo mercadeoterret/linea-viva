@@ -13,6 +13,7 @@ import urllib.parse
 import uuid
 import plotly.graph_objects as go
 import plotly.express as px
+from streamlit_google_auth import Authenticate
 
 st.set_page_config(
     page_title="Linea Viva · Terret",
@@ -174,33 +175,65 @@ hr { border-color: #D4CFC4 !important; }
 # ── LOGIN ────────────────────────────────────────────────────────────────────
 
 def check_login():
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    if st.session_state.logged_in:
-        return
-    st.markdown(
-        "<div style='max-width:320px;margin:80px auto;text-align:center;'>"
-        "<div style='background:#2D6A4F;width:48px;height:48px;border-radius:7px;"
-        "display:flex;align-items:center;justify-content:center;"
-        "font-family:Bebas Neue,sans-serif;font-size:24px;color:#F5F0E8;"
-        "margin:0 auto 18px;'>LV</div>"
-        "<div style='font-family:Bebas Neue,sans-serif;font-size:28px;letter-spacing:3px;"
-        "color:#1A1A14;margin-bottom:4px;'>LINEA VIVA</div>"
-        "<div style='font-size:10px;color:#6B6456;letter-spacing:2px;"
-        "text-transform:uppercase;margin-bottom:32px;'>Terret · Inventario</div>"
-        "</div>",
-        unsafe_allow_html=True,
+    from streamlit_google_auth import Authenticate
+
+    allowed_raw = st.secrets.get("ALLOWED_EMAILS", "")
+    allowed_emails = [e.strip().lower() for e in allowed_raw.split(",") if e.strip()]
+
+    authenticator = Authenticate(
+        secret_credentials_path=None,
+        cookie_name="linea_viva_auth",
+        cookie_key=st.secrets.get("COOKIE_KEY", "lv_cookie_secret_2024"),
+        redirect_uri=st.secrets.get("REDIRECT_URI", "http://localhost:8501"),
+        client_id=st.secrets.get("GOOGLE_CLIENT_ID", ""),
+        client_secret=st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
     )
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
-        pwd = st.text_input("Contrasena", type="password", placeholder="••••••••", label_visibility="collapsed")
-        if st.button("ENTRAR"):
-            if pwd == st.secrets.get("APP_PASSWORD", ""):
-                st.session_state.logged_in = True
-                st.rerun()
-            else:
-                st.error("Contrasena incorrecta.")
-    st.stop()
+
+    authenticator.check_authentification()
+
+    if not st.session_state.get("connected"):
+        st.markdown(
+            "<div style='max-width:360px;margin:80px auto;text-align:center;'>"
+            "<div style='background:#2D6A4F;width:56px;height:56px;border-radius:10px;"
+            "display:flex;align-items:center;justify-content:center;"
+            "font-family:Bebas Neue,sans-serif;font-size:26px;color:#F5F0E8;"
+            "margin:0 auto 20px;'>LV</div>"
+            "<div style='font-family:Bebas Neue,sans-serif;font-size:30px;letter-spacing:3px;"
+            "color:#1A1A14;margin-bottom:4px;'>LINEA VIVA</div>"
+            "<div style='font-size:10px;color:#6B6456;letter-spacing:2px;"
+            "text-transform:uppercase;margin-bottom:40px;'>Terret · Inventario</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        _, col, _ = st.columns([1, 2, 1])
+        with col:
+            authenticator.login()
+        st.stop()
+
+    # Verificar dominio autorizado
+    user_email  = st.session_state.get("user_info", {}).get("email", "").lower()
+    user_domain = user_email.split("@")[-1] if "@" in user_email else ""
+
+    allowed_domains = [d.strip().lower() for d in
+                       st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",")
+                       if d.strip()]
+    allowed_emails  = [e.strip().lower() for e in
+                       st.secrets.get("ALLOWED_EMAILS", "").split(",")
+                       if e.strip()]
+
+    autorizado = (user_domain in allowed_domains) or (user_email in allowed_emails)
+
+    if not autorizado:
+        st.error("Acceso no autorizado: " + user_email +
+                 ". Solo cuentas @terretsports.com y @terret.co.")
+        if st.button("Cerrar sesion"):
+            authenticator.logout()
+            st.rerun()
+        st.stop()
+
+    st.session_state.logged_in  = True
+    st.session_state.user_email = user_email
+    st.session_state.user_name  = st.session_state.get("user_info", {}).get("name", "")
 
 
 # ── SHEETS ───────────────────────────────────────────────────────────────────
