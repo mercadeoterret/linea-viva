@@ -221,10 +221,15 @@ def check_login():
         
         _, col, _ = st.columns([1, 2, 1])
         with col:
-            # Botón oficial de Google usando components.html
+            # Botón oficial de Google usando components.html y JavaScript para forzar el redireccionamiento
             google_button_html = f"""
+            <script>
+                function redireccionar() {{
+                    window.top.location.href = "{login_url}";
+                }}
+            </script>
             <div style="display: flex; justify-content: center; font-family: 'DM Sans', Roboto, sans-serif; padding-top: 5px;">
-                <a href="{login_url}" target="_top" style="
+                <div onclick="redireccionar()" style="
                     display: flex; 
                     align-items: center; 
                     justify-content: center; 
@@ -233,7 +238,6 @@ def check_login():
                     border: 1px solid #dadce0; 
                     border-radius: 4px; 
                     padding: 10px 15px; 
-                    text-decoration: none; 
                     font-size: 14px; 
                     font-weight: 500; 
                     box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3);
@@ -250,7 +254,7 @@ def check_login():
                         <path fill="none" d="M0 0h48v48H0z"></path>
                     </svg>
                     <span>Iniciar sesión con Google</span>
-                </a>
+                </div>
             </div>
             """
             st.components.v1.html(google_button_html, height=60)
