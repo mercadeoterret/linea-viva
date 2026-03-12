@@ -77,13 +77,13 @@ def calcular_estado(stock, ventas60d, dias_inv):
 
 ESTADOS = {
     "REPROGRAMAR":   {"icon": "⚡", "label": "Reprogramar",   "color": "#FF3B30", "desc": "Cobertura <= 30 dias con ventas activas, o quiebre. Pedir ya."},
-    "ESTRELLA":      {"icon": "⭐", "label": "Estrella",      "color": "#D4FF00", "desc": "Ventas >= 25 en 60d. Best seller — nunca dejar sin stock."},
+    "ESTRELLA":      {"icon": "⭐", "label": "Estrella",      "color": "#2D6A4F", "desc": "Ventas >= 25 en 60d. Best seller — nunca dejar sin stock."},
     "ALTA_ROTACION": {"icon": "🔥", "label": "Alta Rotacion", "color": "#FFB800", "desc": "Ventas >= 10 en 60d. Monitorear de cerca."},
     "SOBRESTOCK":    {"icon": "🔴", "label": "Sobrestock",    "color": "#FF6B35", "desc": "Cobertura > 120 dias. Pausar pedidos."},
     "SALUDABLE":     {"icon": "✅", "label": "Saludable",     "color": "#00C853", "desc": "Ventas 4-9, cobertura 31-90d. Stock equilibrado."},
     "MONITOREAR":    {"icon": "👁",  "label": "Monitorear",   "color": "#4488FF", "desc": "Ventas 4-9, cobertura > 90d. Revisar proximo ciclo."},
     "LIQUIDAR":      {"icon": "📦", "label": "Liquidar",      "color": "#FF9500", "desc": "Ventas <= 3 y cobertura > 90d. Precio especial o retiro."},
-    "HUECO":         {"icon": "⚪", "label": "Hueco",         "color": "#3A3A5C", "desc": "Stock 0 y ventas 0. Posiblemente descontinuado."},
+    "HUECO":         {"icon": "⚪", "label": "Hueco",         "color": "#B8B0A4", "desc": "Stock 0 y ventas 0. Posiblemente descontinuado."},
 }
 
 ORDEN_SIDEBAR = ["REPROGRAMAR", "ESTRELLA", "ALTA_ROTACION", "SOBRESTOCK", "SALUDABLE", "MONITOREAR", "LIQUIDAR", "HUECO"]
@@ -95,20 +95,20 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 html, body, [data-testid="stAppViewContainer"] {
-    background: #07070F !important;
-    color: #E2E2F0 !important;
+    background: #F5F0E8 !important;
+    color: #1A1A14 !important;
     font-family: 'DM Sans', sans-serif;
 }
-[data-testid="stAppViewContainer"] > .main { background: #07070F; }
-[data-testid="stHeader"] { background: #07070F !important; border-bottom: 1px solid #1C1C2E; }
+[data-testid="stAppViewContainer"] > .main { background: #F5F0E8; }
+[data-testid="stHeader"] { background: #F5F0E8 !important; border-bottom: 1px solid #D4CFC4; }
 
 section[data-testid="stSidebar"] {
-    background: #0F0F1A !important;
-    border-right: 1px solid #1C1C2E !important;
+    background: #EDEAE0 !important;
+    border-right: 1px solid #D4CFC4 !important;
 }
 section[data-testid="stSidebar"] .stButton > button {
     background: transparent !important;
-    color: #E2E2F0 !important;
+    color: #1A1A14 !important;
     font-family: 'DM Sans', sans-serif !important;
     font-size: 13px !important;
     font-weight: 500 !important;
@@ -120,31 +120,31 @@ section[data-testid="stSidebar"] .stButton > button {
     width: 100%;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
-    background: rgba(255,255,255,0.05) !important;
+    background: rgba(45,106,79,0.08) !important;
     transform: none !important;
 }
 
 [data-testid="stMetric"] {
-    background: #0F0F1A;
-    border: 1px solid #1C1C2E;
+    background: #EDEAE0;
+    border: 1px solid #D4CFC4;
     border-radius: 6px;
     padding: 10px 14px;
 }
 [data-testid="stMetricValue"] {
     font-family: 'Bebas Neue', sans-serif !important;
     font-size: 1.8rem !important;
-    color: #D4FF00 !important;
+    color: #2D6A4F !important;
 }
 [data-testid="stMetricLabel"] {
     font-size: 9px !important;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #5A5A7A !important;
+    color: #6B6456 !important;
 }
 
 .stButton > button {
-    background: #D4FF00 !important;
-    color: #07070F !important;
+    background: #2D6A4F !important;
+    color: #F5F0E8 !important;
     font-family: 'Bebas Neue', sans-serif !important;
     font-size: 13px !important;
     letter-spacing: 2px !important;
@@ -156,17 +156,17 @@ section[data-testid="stSidebar"] .stButton > button:hover {
 .stButton > button:hover { opacity: 0.85 !important; }
 
 .stTextInput input, .stNumberInput input, .stDateInput input {
-    background: #0F0F1A !important;
-    border: 1px solid #1C1C2E !important;
-    color: #E2E2F0 !important;
+    background: #EDEAE0 !important;
+    border: 1px solid #D4CFC4 !important;
+    color: #1A1A14 !important;
     border-radius: 4px !important;
     font-size: 13px !important;
 }
 .stSelectbox [data-baseweb="select"] > div {
-    background: #0F0F1A !important;
-    border-color: #1C1C2E !important;
+    background: #EDEAE0 !important;
+    border-color: #D4CFC4 !important;
 }
-hr { border-color: #1C1C2E !important; }
+hr { border-color: #D4CFC4 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -180,13 +180,13 @@ def check_login():
         return
     st.markdown(
         "<div style='max-width:320px;margin:80px auto;text-align:center;'>"
-        "<div style='background:#D4FF00;width:48px;height:48px;border-radius:7px;"
+        "<div style='background:#2D6A4F;width:48px;height:48px;border-radius:7px;"
         "display:flex;align-items:center;justify-content:center;"
-        "font-family:Bebas Neue,sans-serif;font-size:24px;color:#07070F;"
+        "font-family:Bebas Neue,sans-serif;font-size:24px;color:#F5F0E8;"
         "margin:0 auto 18px;'>LV</div>"
         "<div style='font-family:Bebas Neue,sans-serif;font-size:28px;letter-spacing:3px;"
-        "color:#E2E2F0;margin-bottom:4px;'>LINEA VIVA</div>"
-        "<div style='font-size:10px;color:#5A5A7A;letter-spacing:2px;"
+        "color:#1A1A14;margin-bottom:4px;'>LINEA VIVA</div>"
+        "<div style='font-size:10px;color:#6B6456;letter-spacing:2px;"
         "text-transform:uppercase;margin-bottom:32px;'>Terret · Inventario</div>"
         "</div>",
         unsafe_allow_html=True,
@@ -439,27 +439,27 @@ def agrupar(df, estado):
 def color_dias(estado):
     return {
         "REPROGRAMAR":   "#FF3B30",
-        "ESTRELLA":      "#D4FF00",
+        "ESTRELLA":      "#2D6A4F",
         "ALTA_ROTACION": "#FFB800",
         "SOBRESTOCK":    "#FF6B35",
         "SALUDABLE":     "#00C853",
         "MONITOREAR":    "#4488FF",
         "LIQUIDAR":      "#FF9500",
-        "HUECO":         "#3A3A5C",
-    }.get(estado, "#5A5A7A")
+        "HUECO":         "#B8B0A4",
+    }.get(estado, "#6B6456")
 
 
 def color_borde(estado):
     return {
         "REPROGRAMAR":   "#FF3B30",
-        "ESTRELLA":      "#D4FF00",
+        "ESTRELLA":      "#2D6A4F",
         "ALTA_ROTACION": "#FFB800",
         "SOBRESTOCK":    "#FF6B35",
         "SALUDABLE":     "#00C853",
         "MONITOREAR":    "#4488FF",
         "LIQUIDAR":      "#FF9500",
-        "HUECO":         "#3A3A5C",
-    }.get(estado, "#3A3A5C")
+        "HUECO":         "#B8B0A4",
+    }.get(estado, "#B8B0A4")
 
 
 # ── SUGERENCIA DE REPOSICION ─────────────────────────────────────────────────
@@ -537,14 +537,14 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
         "grid-template-columns:2fr 1fr 1fr 1.2fr;"
         "gap:8px;"
         "padding:8px 14px;"
-        "border-top:1px solid #1C1C2E;"
+        "border-top:1px solid #D4CFC4;"
         "align-items:center;"
         "font-size:13px;"
         "background:" + bg + ";'>"
         "<div style='font-weight:500;'>" + var + "</div>"
-        "<div style='font-family:DM Mono,monospace;color:#5A5A7A;font-size:12px;'>" + str(stock) + " u</div>"
+        "<div style='font-family:DM Mono,monospace;color:#6B6456;font-size:12px;'>" + str(stock) + " u</div>"
         "<div style='font-family:Bebas Neue,sans-serif;font-size:22px;line-height:1;color:" + c_dias + ";'>" + dias_str + "</div>"
-        "<div style='font-size:12px;color:#5A5A7A;'>" + str(v60) + " u</div>"
+        "<div style='font-size:12px;color:#6B6456;'>" + str(v60) + " u</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -616,13 +616,13 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
     # uid es un entero incremental global — 100% unico sin importar el nombre
     prod_key  = "p" + uid
     tallas    = str(n) + " talla" + ("s" if n > 1 else "")
-    bs_html   = " · <span style='color:#D4FF00;font-size:10px;'>⭐ BS</span>" if es_bs else ""
+    bs_html   = " · <span style='color:#2D6A4F;font-size:10px;'>⭐ BS</span>" if es_bs else ""
 
     # Header — completamente cerrado
     st.markdown(
         "<div style='"
-        "background:#0F0F1A;"
-        "border:1px solid #1C1C2E;"
+        "background:#EDEAE0;"
+        "border:1px solid #D4CFC4;"
         "border-left:3px solid " + c_borde + ";"
         "border-radius:8px 8px 0 0;"
         "padding:11px 14px;"
@@ -632,13 +632,13 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
         "<div style='font-weight:600;font-size:14px;flex:1;line-height:1.2;'>"
         + prod.upper() +
         "</div>"
-        "<div style='font-size:11px;color:#5A5A7A;'>"
+        "<div style='font-size:11px;color:#6B6456;'>"
         + tallas + bs_html +
         "</div>"
         "</div>"
         "<div style='"
-        "background:#0F0F1A;"
-        "border:1px solid #1C1C2E;"
+        "background:#EDEAE0;"
+        "border:1px solid #D4CFC4;"
         "border-top:none;"
         "border-left:3px solid " + c_borde + ";"
         "display:grid;"
@@ -646,7 +646,7 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
         "gap:8px;"
         "padding:5px 14px;"
         "font-size:9px;"
-        "color:#5A5A7A;"
+        "color:#6B6456;"
         "letter-spacing:1.5px;"
         "text-transform:uppercase;"
         "font-family:DM Mono,monospace;'>"
@@ -665,8 +665,8 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
     # Pie de tarjeta — cerrado
     st.markdown(
         "<div style='"
-        "background:#0F0F1A;"
-        "border:1px solid #1C1C2E;"
+        "background:#EDEAE0;"
+        "border:1px solid #D4CFC4;"
         "border-top:none;"
         "border-left:3px solid " + c_borde + ";"
         "border-radius:0 0 8px 8px;"
@@ -684,7 +684,7 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
             "border-radius:6px;"
             "padding:10px 14px 6px 14px;"
             "margin-top:4px;'>"
-            "<div style='font-size:10px;color:#5A5A7A;letter-spacing:1.5px;"
+            "<div style='font-size:10px;color:#6B6456;letter-spacing:1.5px;"
             "text-transform:uppercase;margin-bottom:8px;'>"
             "Programar todas — " + str(n) + " tallas"
             "</div>"
@@ -746,8 +746,8 @@ def vista_dashboard(df, ordenes_df):
     # ── HEADER ────────────────────────────────────────────────────────────────
     st.markdown(
         "<div style='font-family:Bebas Neue,sans-serif;font-size:26px;"
-        "letter-spacing:3px;color:#E2E2F0;margin-bottom:4px;'>DASHBOARD</div>"
-        "<div style='font-size:11px;color:#5A5A7A;letter-spacing:1px;"
+        "letter-spacing:3px;color:#1A1A14;margin-bottom:4px;'>DASHBOARD</div>"
+        "<div style='font-size:11px;color:#6B6456;letter-spacing:1px;"
         "text-transform:uppercase;margin-bottom:20px;'>"
         "Vision general del inventario · " + datetime.now().strftime("%d/%m/%Y %H:%M") +
         "</div>",
@@ -789,7 +789,7 @@ def vista_dashboard(df, ordenes_df):
     with col_left:
         st.markdown(
             "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>SEGMENTOS</div>",
+            "letter-spacing:2px;color:#6B6456;margin-bottom:8px;'>SEGMENTOS</div>",
             unsafe_allow_html=True,
         )
         # Contar productos por segmento
@@ -799,11 +799,11 @@ def vista_dashboard(df, ordenes_df):
 
         colores_seg = {
             "REPROGRAMAR":   "#FF3B30",
-            "ESTRELLA":      "#D4FF00",
+            "ESTRELLA":      "#2D6A4F",
             "ALTA_ROTACION": "#FFB800",
             "SALUDABLE":     "#00C853",
             "LIQUIDAR":      "#FF6B35",
-            "HUECO":         "#3A3A5C",
+            "HUECO":         "#B8B0A4",
         }
         labels_seg = {
             "REPROGRAMAR":   "Reprogramar",
@@ -814,29 +814,29 @@ def vista_dashboard(df, ordenes_df):
             "HUECO":         "Hueco",
         }
 
-        colores = [colores_seg.get(e, "#5A5A7A") for e in seg_counts["Estado"]]
+        colores = [colores_seg.get(e, "#6B6456") for e in seg_counts["Estado"]]
         labels  = [labels_seg.get(e, e) for e in seg_counts["Estado"]]
 
         fig_pie = go.Figure(go.Pie(
             labels=labels,
             values=seg_counts["Productos"],
             hole=0.55,
-            marker=dict(colors=colores, line=dict(color="#07070F", width=2)),
+            marker=dict(colors=colores, line=dict(color="#F5F0E8", width=2)),
             textinfo="label+percent",
-            textfont=dict(size=11, color="#E2E2F0"),
+            textfont=dict(size=11, color="#1A1A14"),
             hovertemplate="<b>%{label}</b><br>%{value} productos<br>%{percent}<extra></extra>",
         ))
         fig_pie.update_layout(
-            paper_bgcolor="#0F0F1A",
-            plot_bgcolor="#0F0F1A",
-            font=dict(color="#E2E2F0", family="DM Sans"),
+            paper_bgcolor="#EDEAE0",
+            plot_bgcolor="#EDEAE0",
+            font=dict(color="#1A1A14", family="DM Sans"),
             margin=dict(t=10, b=10, l=10, r=10),
             height=280,
             showlegend=False,
             annotations=[dict(
                 text="<b>" + str(total_prods) + "</b><br><span style='font-size:10px'>productos</span>",
                 x=0.5, y=0.5, font_size=16, showarrow=False,
-                font=dict(color="#E2E2F0"),
+                font=dict(color="#1A1A14"),
             )],
         )
         st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
@@ -844,7 +844,7 @@ def vista_dashboard(df, ordenes_df):
     with col_right:
         st.markdown(
             "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>STOCK CRITICO — TOP 10</div>",
+            "letter-spacing:2px;color:#6B6456;margin-bottom:8px;'>STOCK CRITICO — TOP 10</div>",
             unsafe_allow_html=True,
         )
         # Productos con menos dias de inventario y ventas activas
@@ -858,7 +858,7 @@ def vista_dashboard(df, ordenes_df):
 
         if criticos.empty:
             st.markdown(
-                "<div style='text-align:center;padding:40px;color:#5A5A7A;'>"
+                "<div style='text-align:center;padding:40px;color:#6B6456;'>"
                 "Sin productos criticos</div>",
                 unsafe_allow_html=True,
             )
@@ -875,17 +875,17 @@ def vista_dashboard(df, ordenes_df):
                 ),
                 text=criticos["dias_min"].astype(str) + "d",
                 textposition="outside",
-                textfont=dict(size=10, color="#E2E2F0"),
+                textfont=dict(size=10, color="#1A1A14"),
                 hovertemplate="<b>%{y}</b><br>%{x} dias<extra></extra>",
             ))
             fig_bar.update_layout(
-                paper_bgcolor="#0F0F1A",
-                plot_bgcolor="#0F0F1A",
-                font=dict(color="#E2E2F0", family="DM Sans"),
+                paper_bgcolor="#EDEAE0",
+                plot_bgcolor="#EDEAE0",
+                font=dict(color="#1A1A14", family="DM Sans"),
                 margin=dict(t=10, b=10, l=180, r=60),
                 height=310,
                 xaxis=dict(
-                    showgrid=True, gridcolor="#1C1C2E",
+                    showgrid=True, gridcolor="#D4CFC4",
                     zeroline=False, showticklabels=False,
                     range=[0, max(criticos["dias_min"].max() * 1.3, 35)],
                 ),
@@ -898,7 +898,7 @@ def vista_dashboard(df, ordenes_df):
                 annotations=[dict(
                     x=LEAD_TIME_DIAS, y=len(criticos) - 0.5,
                     text="Lead time", showarrow=False,
-                    font=dict(size=8, color="#FF3B30"),
+                    font=dict(size=8, color="#CC2200"),
                     xanchor="left",
                 )],
             )
@@ -912,7 +912,7 @@ def vista_dashboard(df, ordenes_df):
         with top_c1:
             st.markdown(
                 "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-                "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>TOP VENTAS 60D</div>",
+                "letter-spacing:2px;color:#6B6456;margin-bottom:8px;'>TOP VENTAS 60D</div>",
                 unsafe_allow_html=True,
             )
         with top_c2:
@@ -950,7 +950,7 @@ def vista_dashboard(df, ordenes_df):
             ]
 
         colores_top = [
-            "#D4FF00" if e == "ESTRELLA" else
+            "#2D6A4F" if e == "ESTRELLA" else
             "#FFB800" if e == "ALTA_ROTACION" else
             "#FF3B30" if e == "REPROGRAMAR" else "#4488FF"
             for e in estados
@@ -962,17 +962,17 @@ def vista_dashboard(df, ordenes_df):
             marker=dict(color=colores_top),
             text=[str(int(v)) + " u" for v in x_vals],
             textposition="outside",
-            textfont=dict(size=10, color="#E2E2F0"),
+            textfont=dict(size=10, color="#1A1A14"),
             hovertemplate=hover,
         ))
         altura_top = max(340, n_top * 34)
         fig_top.update_layout(
-            paper_bgcolor="#0F0F1A",
-            plot_bgcolor="#0F0F1A",
-            font=dict(color="#E2E2F0", family="DM Sans"),
+            paper_bgcolor="#EDEAE0",
+            plot_bgcolor="#EDEAE0",
+            font=dict(color="#1A1A14", family="DM Sans"),
             margin=dict(t=10, b=10, l=240, r=70),
             height=altura_top,
-            xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False, showticklabels=False),
+            xaxis=dict(showgrid=True, gridcolor="#D4CFC4", zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, tickfont=dict(size=10), automargin=True),
         )
         st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
@@ -980,7 +980,7 @@ def vista_dashboard(df, ordenes_df):
     with col_right2:
         st.markdown(
             "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>STOCK POR CATEGORIA</div>",
+            "letter-spacing:2px;color:#6B6456;margin-bottom:8px;'>STOCK POR CATEGORIA</div>",
             unsafe_allow_html=True,
         )
         por_tipo = df.groupby("Tipo").agg(
@@ -1007,16 +1007,16 @@ def vista_dashboard(df, ordenes_df):
             marker=dict(color="#4488FF", opacity=0.8),
             text=text_v,
             textposition="outside",
-            textfont=dict(size=9, color="#E2E2F0"),
+            textfont=dict(size=9,  color="#1A1A14"),
             hovertemplate="<b>%{y}</b><br>%{text}<extra></extra>",
         ))
         fig_cat.update_layout(
-            paper_bgcolor="#0F0F1A",
-            plot_bgcolor="#0F0F1A",
-            font=dict(color="#E2E2F0", family="DM Sans"),
+            paper_bgcolor="#EDEAE0",
+            plot_bgcolor="#EDEAE0",
+            font=dict(color="#1A1A14", family="DM Sans"),
             margin=dict(t=10, b=10, l=10, r=80),
             height=300,
-            xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False, showticklabels=False),
+            xaxis=dict(showgrid=True, gridcolor="#D4CFC4", zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, tickfont=dict(size=9)),
         )
         st.plotly_chart(fig_cat, use_container_width=True, config={"displayModeBar": False})
@@ -1025,7 +1025,7 @@ def vista_dashboard(df, ordenes_df):
     if tiene_costos or tiene_precios:
         st.markdown(
             "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-            "letter-spacing:2px;color:#5A5A7A;margin:8px 0;'>VALOR DE INVENTARIO POR CATEGORIA</div>",
+            "letter-spacing:2px;color:#6B6456;margin:8px 0;'>VALOR DE INVENTARIO POR CATEGORIA</div>",
             unsafe_allow_html=True,
         )
         por_tipo_v = df.groupby("Tipo").agg(
@@ -1048,10 +1048,10 @@ def vista_dashboard(df, ordenes_df):
             x=ventas,
             y=cats,
             orientation="h",
-            marker=dict(color="#D4FF00", opacity=0.85),
+            marker=dict(color="#2D6A4F", opacity=0.85),
             text=["$" + f"{v/1e6:.1f}M" if v >= 1e6 else "$" + f"{v:,.0f}" for v in ventas],
             textposition="outside",
-            textfont=dict(size=9, color="#D4FF00"),
+            textfont=dict(size=9, color="#2D6A4F"),
             hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>",
         ))
 
@@ -1064,15 +1064,15 @@ def vista_dashboard(df, ordenes_df):
             marker=dict(color="#4488FF", opacity=0.9),
             text=["$" + f"{v/1e6:.1f}M" if v >= 1e6 else "$" + f"{v:,.0f}" for v in costos],
             textposition="inside",
-            textfont=dict(size=8, color="#E2E2F0"),
+            textfont=dict(size=8, color="#1A1A14"),
             hovertemplate="<b>%{y}</b><br>Costo: $%{x:,.0f}<extra></extra>",
         ))
 
         fig_val.update_layout(
             barmode="overlay",
-            paper_bgcolor="#0F0F1A",
-            plot_bgcolor="#0F0F1A",
-            font=dict(color="#E2E2F0", family="DM Sans"),
+            paper_bgcolor="#EDEAE0",
+            plot_bgcolor="#EDEAE0",
+            font=dict(color="#1A1A14", family="DM Sans"),
             margin=dict(t=30, b=20, l=160, r=90),
             height=altura,
             legend=dict(
@@ -1081,7 +1081,7 @@ def vista_dashboard(df, ordenes_df):
                 traceorder="reversed",
             ),
             xaxis=dict(
-                showgrid=True, gridcolor="#1C1C2E", zeroline=False,
+                showgrid=True, gridcolor="#D4CFC4", zeroline=False,
                 tickprefix="$", tickformat=",.0f", tickfont=dict(size=9),
             ),
             yaxis=dict(
@@ -1095,7 +1095,7 @@ def vista_dashboard(df, ordenes_df):
     # ── TABLA RESUMEN POR SEGMENTO ────────────────────────────────────────────
     st.markdown(
         "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-        "letter-spacing:2px;color:#5A5A7A;margin:8px 0;'>RESUMEN POR SEGMENTO</div>",
+        "letter-spacing:2px;color:#6B6456;margin:8px 0;'>RESUMEN POR SEGMENTO</div>",
         unsafe_allow_html=True,
     )
     resumen = []
@@ -1123,7 +1123,7 @@ def vista_dashboard(df, ordenes_df):
     # Nota si no hay costos
     if not tiene_costos:
         st.markdown(
-            "<div style='font-size:10px;color:#3A3A5C;margin-top:8px;'>"
+            "<div style='font-size:10px;color:#B8B0A4;margin-top:8px;'>"
             "* Valor de inventario no disponible. Agrega las columnas Costo y Precio Venta "
             "al Sheet via Apps Script para verlo.</div>",
             unsafe_allow_html=True,
@@ -1135,15 +1135,15 @@ def vista_dashboard(df, ordenes_df):
 def render_sidebar(conteos):
     with st.sidebar:
         st.markdown(
-            "<div style='padding:16px 4px 14px 4px;border-bottom:1px solid #1C1C2E;margin-bottom:10px;'>"
+            "<div style='padding:16px 4px 14px 4px;border-bottom:1px solid #D4CFC4;margin-bottom:10px;'>"
             "<div style='display:flex;align-items:center;gap:10px;'>"
-            "<div style='background:#D4FF00;width:30px;height:30px;border-radius:4px;"
+            "<div style='background:#2D6A4F;width:30px;height:30px;border-radius:4px;"
             "display:flex;align-items:center;justify-content:center;"
-            "font-family:Bebas Neue,sans-serif;font-size:15px;color:#07070F;flex-shrink:0;'>LV</div>"
+            "font-family:Bebas Neue,sans-serif;font-size:15px;color:#F5F0E8;flex-shrink:0;'>LV</div>"
             "<div>"
             "<div style='font-family:Bebas Neue,sans-serif;font-size:16px;letter-spacing:2px;"
-            "color:#E2E2F0;line-height:1;'>LINEA VIVA</div>"
-            "<div style='font-size:9px;color:#5A5A7A;letter-spacing:1px;text-transform:uppercase;'>"
+            "color:#1A1A14;line-height:1;'>LINEA VIVA</div>"
+            "<div style='font-size:9px;color:#6B6456;letter-spacing:1px;text-transform:uppercase;'>"
             "Terret · Inventario</div>"
             "</div>"
             "</div>"
@@ -1160,7 +1160,7 @@ def render_sidebar(conteos):
             st.session_state.vista = "DASHBOARD"
             st.rerun()
 
-        st.markdown("<hr style='border-color:#1C1C2E;margin:6px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color:#D4CFC4;margin:6px 0;'>", unsafe_allow_html=True)
 
         for estado in ORDEN_SIDEBAR:
             cfg = ESTADOS[estado]
@@ -1172,7 +1172,7 @@ def render_sidebar(conteos):
                 st.session_state.vista = estado
                 st.rerun()
 
-        st.markdown("<hr style='border-color:#1C1C2E;margin:6px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color:#D4CFC4;margin:6px 0;'>", unsafe_allow_html=True)
 
         if st.button("📋  Ordenes", key="nav_ordenes"):
             st.session_state.vista = "ORDENES"
@@ -1185,7 +1185,7 @@ def render_sidebar(conteos):
             st.rerun()
 
         st.markdown(
-            "<div style='margin-top:8px;font-size:9px;color:#2A2A3E;padding:0 4px;'>"
+            "<div style='margin-top:8px;font-size:9px;color:#C8C2B4;padding:0 4px;'>"
             + datetime.now().strftime("%d/%m/%Y %H:%M") +
             "</div>",
             unsafe_allow_html=True,
@@ -1202,8 +1202,8 @@ def vista_estado(df, ordenes_df, client, estado):
     # Banner
     st.markdown(
         "<div style='"
-        "background:#0F0F1A;"
-        "border:1px solid #1C1C2E;"
+        "background:#EDEAE0;"
+        "border:1px solid #D4CFC4;"
         "border-left:4px solid " + color + ";"
         "border-radius:8px;"
         "padding:14px 18px;"
@@ -1215,7 +1215,7 @@ def vista_estado(df, ordenes_df, client, estado):
         "<div>"
         "<div style='font-family:Bebas Neue,sans-serif;font-size:20px;letter-spacing:2px;color:"
         + color + ";'>" + cfg["label"].upper() + "</div>"
-        "<div style='font-size:12px;color:#5A5A7A;margin-top:2px;'>" + cfg["desc"] + "</div>"
+        "<div style='font-size:12px;color:#6B6456;margin-top:2px;'>" + cfg["desc"] + "</div>"
         "</div>"
         "</div>",
         unsafe_allow_html=True,
@@ -1225,7 +1225,7 @@ def vista_estado(df, ordenes_df, client, estado):
 
     if sub.empty:
         st.markdown(
-            "<div style='text-align:center;padding:60px 0;color:#5A5A7A;'>"
+            "<div style='text-align:center;padding:60px 0;color:#6B6456;'>"
             "<div style='font-size:36px;margin-bottom:12px;'>" + cfg["icon"] + "</div>"
             "<div style='font-family:Bebas Neue,sans-serif;font-size:18px;letter-spacing:2px;'>"
             "Sin productos en este estado</div>"
@@ -1305,10 +1305,10 @@ def vista_estado(df, ordenes_df, client, estado):
             "font-family:DM Mono,monospace;"
             "font-size:9px;"
             "letter-spacing:3px;"
-            "color:#3A3A5C;"
+            "color:#B8B0A4;"
             "text-transform:uppercase;"
             "padding:20px 0 6px 0;"
-            "border-bottom:1px solid #1C1C2E;"
+            "border-bottom:1px solid #D4CFC4;"
             "margin-bottom:8px;'>"
             + tipo.upper() + " &nbsp;·&nbsp; " + str(len(grupos)) + " productos"
             "</div>",
@@ -1324,7 +1324,7 @@ def vista_estado(df, ordenes_df, client, estado):
 def vista_ordenes(ordenes_df, client):
     st.markdown(
         "<div style='font-family:Bebas Neue,sans-serif;font-size:22px;"
-        "letter-spacing:3px;color:#E2E2F0;margin-bottom:16px;'>"
+        "letter-spacing:3px;color:#1A1A14;margin-bottom:16px;'>"
         "ORDENES DE PRODUCCION</div>",
         unsafe_allow_html=True,
     )
@@ -1406,7 +1406,7 @@ def main():
             vista_estado(df, ordenes, client, vista)
 
     st.markdown(
-        "<div style='font-size:10px;color:#1C1C2E;text-align:right;margin-top:40px;'>"
+        "<div style='font-size:10px;color:#D4CFC4;text-align:right;margin-top:40px;'>"
         "LINEA VIVA · TERRET · " + datetime.now().strftime("%d.%m.%Y %H:%M") + "</div>",
         unsafe_allow_html=True,
     )
