@@ -11,6 +11,8 @@ import pandas as pd
 from datetime import datetime
 import urllib.parse
 import uuid
+import plotly.graph_objects as go
+import plotly.express as px
 
 st.set_page_config(
     page_title="Linea Viva · Terret",
@@ -383,6 +385,16 @@ def preparar(df):
         lambda r: calcular_estado(r["Stock"], r["Ventas60d"], r["DiasInv_n"]), axis=1
     )
     df["_bs"] = df["Ventas60d"] >= UMBRAL_BS
+
+    # Columnas de valor — opcionales, vienen de Apps Script si estan disponibles
+    for col in ["Costo", "Precio Venta"]:
+        if col not in df.columns:
+            df[col] = 0.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+    # Valor de inventario
+    df["_valor_costo"]  = df["Stock"] * df["Costo"]
+    df["_valor_venta"]  = df["Stock"] * df["Precio Venta"]
     return df
 
 
@@ -704,6 +716,348 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
     st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
 
 
+# ── VISTA DASHBOARD ───────────────────────────────────────────────────────────
+
+def vista_dashboard(df, ordenes_df):
+    if df.empty:
+        st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
+        return
+
+    tiene_costos = df["Costo"].sum() > 0
+    tiene_precios = df["Precio Venta"].sum() > 0
+
+    # ── HEADER ────────────────────────────────────────────────────────────────
+    st.markdown(
+        "<div style='font-family:Bebas Neue,sans-serif;font-size:26px;"
+        "letter-spacing:3px;color:#E2E2F0;margin-bottom:4px;'>DASHBOARD</div>"
+        "<div style='font-size:11px;color:#5A5A7A;letter-spacing:1px;"
+        "text-transform:uppercase;margin-bottom:20px;'>"
+        "Vision general del inventario · " + datetime.now().strftime("%d/%m/%Y %H:%M") +
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── METRICAS PRINCIPALES ──────────────────────────────────────────────────
+    total_skus     = len(df)
+    total_prods    = df["Producto"].nunique()
+    total_stock    = int(df["Stock"].sum())
+    reprogramar_n  = int(df[df["_estado"] == "REPROGRAMAR"]["Producto"].nunique())
+    estrella_n     = int(df[df["_estado"] == "ESTRELLA"]["Producto"].nunique())
+    valor_costo    = df["_valor_costo"].sum()
+    valor_venta    = df["_valor_venta"].sum()
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("SKUs totales", total_skus)
+    with c2: st.metric("Productos", total_prods)
+    with c3: st.metric("Unidades en stock", f"{total_stock:,}")
+    with c4: st.metric("A reprogramar", reprogramar_n)
+
+    if tiene_costos or tiene_precios:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Valor inventario (costo)",
+                      "$" + f"{valor_costo:,.0f}" if valor_costo > 0 else "—")
+        with c2:
+            st.metric("Valor inventario (venta)",
+                      "$" + f"{valor_venta:,.0f}" if valor_venta > 0 else "—")
+        with c3:
+            margen = ((valor_venta - valor_costo) / valor_costo * 100) if valor_costo > 0 else 0
+            st.metric("Margen potencial", f"{margen:.1f}%" if margen > 0 else "—")
+
+    st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+    # ── FILA 1: PASTEL DE SEGMENTOS + STOCK CRITICO ───────────────────────────
+    col_left, col_right = st.columns([1, 1])
+
+    with col_left:
+        st.markdown(
+            "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
+            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>SEGMENTOS</div>",
+            unsafe_allow_html=True,
+        )
+        # Contar productos por segmento
+        seg_counts = df.groupby("_estado")["Producto"].nunique().reset_index()
+        seg_counts.columns = ["Estado", "Productos"]
+        seg_counts = seg_counts[seg_counts["Productos"] > 0]
+
+        colores_seg = {
+            "REPROGRAMAR":   "#FF3B30",
+            "ESTRELLA":      "#D4FF00",
+            "ALTA_ROTACION": "#FFB800",
+            "SALUDABLE":     "#00C853",
+            "LIQUIDAR":      "#FF6B35",
+            "HUECO":         "#3A3A5C",
+        }
+        labels_seg = {
+            "REPROGRAMAR":   "Reprogramar",
+            "ESTRELLA":      "Estrella",
+            "ALTA_ROTACION": "Alta Rotacion",
+            "SALUDABLE":     "Saludable",
+            "LIQUIDAR":      "Liquidar",
+            "HUECO":         "Hueco",
+        }
+
+        colores = [colores_seg.get(e, "#5A5A7A") for e in seg_counts["Estado"]]
+        labels  = [labels_seg.get(e, e) for e in seg_counts["Estado"]]
+
+        fig_pie = go.Figure(go.Pie(
+            labels=labels,
+            values=seg_counts["Productos"],
+            hole=0.55,
+            marker=dict(colors=colores, line=dict(color="#07070F", width=2)),
+            textinfo="label+percent",
+            textfont=dict(size=11, color="#E2E2F0"),
+            hovertemplate="<b>%{label}</b><br>%{value} productos<br>%{percent}<extra></extra>",
+        ))
+        fig_pie.update_layout(
+            paper_bgcolor="#0F0F1A",
+            plot_bgcolor="#0F0F1A",
+            font=dict(color="#E2E2F0", family="DM Sans"),
+            margin=dict(t=10, b=10, l=10, r=10),
+            height=280,
+            showlegend=False,
+            annotations=[dict(
+                text="<b>" + str(total_prods) + "</b><br><span style='font-size:10px'>productos</span>",
+                x=0.5, y=0.5, font_size=16, showarrow=False,
+                font=dict(color="#E2E2F0"),
+            )],
+        )
+        st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+
+    with col_right:
+        st.markdown(
+            "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
+            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>STOCK CRITICO — TOP 10</div>",
+            unsafe_allow_html=True,
+        )
+        # Productos con menos dias de inventario y ventas activas
+        criticos = df[df["_estado"] == "REPROGRAMAR"].copy()
+        criticos = criticos.groupby("Producto").agg(
+            dias_min=("DiasInv_n", "min"),
+            stock_total=("Stock", "sum"),
+            ventas=("Ventas60d", "sum"),
+        ).reset_index()
+        criticos = criticos.sort_values("dias_min").head(10)
+
+        if criticos.empty:
+            st.markdown(
+                "<div style='text-align:center;padding:40px;color:#5A5A7A;'>"
+                "Sin productos criticos</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            # Truncar nombres largos
+            criticos["nombre_corto"] = criticos["Producto"].str[:30]
+            fig_bar = go.Figure(go.Bar(
+                x=criticos["dias_min"],
+                y=criticos["nombre_corto"],
+                orientation="h",
+                marker=dict(
+                    color=criticos["dias_min"],
+                    colorscale=[[0, "#FF3B30"], [0.5, "#FFB800"], [1, "#FFB800"]],
+                    showscale=False,
+                ),
+                text=criticos["dias_min"].astype(str) + "d",
+                textposition="outside",
+                textfont=dict(size=10, color="#E2E2F0"),
+                hovertemplate="<b>%{y}</b><br>%{x} dias<extra></extra>",
+            ))
+            fig_bar.update_layout(
+                paper_bgcolor="#0F0F1A",
+                plot_bgcolor="#0F0F1A",
+                font=dict(color="#E2E2F0", family="DM Sans"),
+                margin=dict(t=10, b=10, l=10, r=60),
+                height=280,
+                xaxis=dict(
+                    showgrid=True, gridcolor="#1C1C2E",
+                    zeroline=False, showticklabels=False,
+                    range=[0, max(criticos["dias_min"].max() * 1.3, 35)],
+                ),
+                yaxis=dict(showgrid=False, tickfont=dict(size=9)),
+                shapes=[dict(
+                    type="line", x0=LEAD_TIME_DIAS, x1=LEAD_TIME_DIAS,
+                    y0=-0.5, y1=len(criticos) - 0.5,
+                    line=dict(color="#FF3B30", width=1, dash="dot"),
+                )],
+                annotations=[dict(
+                    x=LEAD_TIME_DIAS, y=len(criticos) - 0.5,
+                    text="Lead time", showarrow=False,
+                    font=dict(size=8, color="#FF3B30"),
+                    xanchor="left",
+                )],
+            )
+            st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+
+    # ── FILA 2: TOP 10 VENTAS + BARRAS POR CATEGORIA ─────────────────────────
+    col_left2, col_right2 = st.columns([1, 1])
+
+    with col_left2:
+        st.markdown(
+            "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
+            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>TOP 10 PRODUCTOS POR VENTAS 60D</div>",
+            unsafe_allow_html=True,
+        )
+        top_ventas = df.groupby("Producto")["Ventas60d"].sum().reset_index()
+        top_ventas = top_ventas.sort_values("Ventas60d", ascending=True).tail(10)
+        top_ventas["nombre_corto"] = top_ventas["Producto"].str[:30]
+
+        # Color segun si es estrella o no
+        estado_prod = df.groupby("Producto")["_estado"].first().to_dict()
+        colores_v = [
+            "#D4FF00" if estado_prod.get(p) == "ESTRELLA" else
+            "#FFB800" if estado_prod.get(p) == "ALTA_ROTACION" else "#4488FF"
+            for p in top_ventas["Producto"]
+        ]
+
+        fig_top = go.Figure(go.Bar(
+            x=top_ventas["Ventas60d"],
+            y=top_ventas["nombre_corto"],
+            orientation="h",
+            marker=dict(color=colores_v),
+            text=top_ventas["Ventas60d"].astype(int).astype(str) + " u",
+            textposition="outside",
+            textfont=dict(size=10, color="#E2E2F0"),
+            hovertemplate="<b>%{y}</b><br>%{x} unidades<extra></extra>",
+        ))
+        fig_top.update_layout(
+            paper_bgcolor="#0F0F1A",
+            plot_bgcolor="#0F0F1A",
+            font=dict(color="#E2E2F0", family="DM Sans"),
+            margin=dict(t=10, b=10, l=10, r=60),
+            height=300,
+            xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, tickfont=dict(size=9)),
+        )
+        st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
+
+    with col_right2:
+        st.markdown(
+            "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
+            "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>STOCK POR CATEGORIA</div>",
+            unsafe_allow_html=True,
+        )
+        por_tipo = df.groupby("Tipo").agg(
+            stock=("Stock", "sum"),
+            valor_costo=("_valor_costo", "sum"),
+            valor_venta=("_valor_venta", "sum"),
+            productos=("Producto", "nunique"),
+        ).reset_index().sort_values("stock", ascending=True)
+
+        # Si hay costos mostrar valor, si no mostrar unidades
+        if tiene_costos:
+            x_vals  = por_tipo["valor_costo"]
+            x_label = "Valor (costo)"
+            text_v  = ["$" + f"{v:,.0f}" for v in por_tipo["valor_costo"]]
+        else:
+            x_vals  = por_tipo["stock"]
+            x_label = "Unidades"
+            text_v  = [str(int(v)) + " u" for v in por_tipo["stock"]]
+
+        fig_cat = go.Figure(go.Bar(
+            x=x_vals,
+            y=por_tipo["Tipo"].str[:20],
+            orientation="h",
+            marker=dict(color="#4488FF", opacity=0.8),
+            text=text_v,
+            textposition="outside",
+            textfont=dict(size=9, color="#E2E2F0"),
+            hovertemplate="<b>%{y}</b><br>%{text}<extra></extra>",
+        ))
+        fig_cat.update_layout(
+            paper_bgcolor="#0F0F1A",
+            plot_bgcolor="#0F0F1A",
+            font=dict(color="#E2E2F0", family="DM Sans"),
+            margin=dict(t=10, b=10, l=10, r=80),
+            height=300,
+            xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, tickfont=dict(size=9)),
+        )
+        st.plotly_chart(fig_cat, use_container_width=True, config={"displayModeBar": False})
+
+    # ── FILA 3: VALOR DE INVENTARIO (si hay datos) + TABLA RESUMEN ───────────
+    if tiene_costos or tiene_precios:
+        st.markdown(
+            "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
+            "letter-spacing:2px;color:#5A5A7A;margin:8px 0;'>VALOR DE INVENTARIO POR CATEGORIA</div>",
+            unsafe_allow_html=True,
+        )
+        por_tipo_v = df.groupby("Tipo").agg(
+            valor_costo=("_valor_costo", "sum"),
+            valor_venta=("_valor_venta", "sum"),
+        ).reset_index().sort_values("valor_venta", ascending=True)
+
+        fig_val = go.Figure()
+        fig_val.add_trace(go.Bar(
+            name="Costo",
+            x=por_tipo_v["valor_costo"],
+            y=por_tipo_v["Tipo"].str[:20],
+            orientation="h",
+            marker_color="#4488FF",
+            hovertemplate="<b>%{y}</b><br>Costo: $%{x:,.0f}<extra></extra>",
+        ))
+        fig_val.add_trace(go.Bar(
+            name="Precio venta",
+            x=por_tipo_v["valor_venta"],
+            y=por_tipo_v["Tipo"].str[:20],
+            orientation="h",
+            marker_color="#D4FF00",
+            hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>",
+        ))
+        fig_val.update_layout(
+            barmode="group",
+            paper_bgcolor="#0F0F1A",
+            plot_bgcolor="#0F0F1A",
+            font=dict(color="#E2E2F0", family="DM Sans"),
+            margin=dict(t=10, b=10, l=10, r=20),
+            height=300,
+            legend=dict(
+                orientation="h", yanchor="bottom", y=1.02,
+                font=dict(size=10), bgcolor="rgba(0,0,0,0)",
+            ),
+            xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False,
+                       tickprefix="$", tickformat=",.0f"),
+            yaxis=dict(showgrid=False, tickfont=dict(size=9)),
+        )
+        st.plotly_chart(fig_val, use_container_width=True, config={"displayModeBar": False})
+
+    # ── TABLA RESUMEN POR SEGMENTO ────────────────────────────────────────────
+    st.markdown(
+        "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
+        "letter-spacing:2px;color:#5A5A7A;margin:8px 0;'>RESUMEN POR SEGMENTO</div>",
+        unsafe_allow_html=True,
+    )
+    resumen = []
+    for estado in ORDEN_SIDEBAR:
+        cfg  = ESTADOS[estado]
+        sub  = df[df["_estado"] == estado]
+        if sub.empty:
+            continue
+        row = {
+            "Segmento":  cfg["icon"] + " " + cfg["label"],
+            "Productos": sub["Producto"].nunique(),
+            "SKUs":      len(sub),
+            "Stock total": int(sub["Stock"].sum()),
+            "Ventas 60d": int(sub["Ventas60d"].sum()),
+        }
+        if tiene_costos:
+            row["Valor costo"] = "$" + f"{sub['_valor_costo'].sum():,.0f}"
+        if tiene_precios:
+            row["Valor venta"] = "$" + f"{sub['_valor_venta'].sum():,.0f}"
+        resumen.append(row)
+
+    df_resumen = pd.DataFrame(resumen)
+    st.dataframe(df_resumen, use_container_width=True, hide_index=True)
+
+    # Nota si no hay costos
+    if not tiene_costos:
+        st.markdown(
+            "<div style='font-size:10px;color:#3A3A5C;margin-top:8px;'>"
+            "* Valor de inventario no disponible. Agrega las columnas Costo y Precio Venta "
+            "al Sheet via Apps Script para verlo.</div>",
+            unsafe_allow_html=True,
+        )
+
+
 # ── SIDEBAR ──────────────────────────────────────────────────────────────────
 
 def render_sidebar(conteos):
@@ -725,7 +1079,16 @@ def render_sidebar(conteos):
             unsafe_allow_html=True,
         )
 
-        vista_actual = st.session_state.get("vista", "URGENTE")
+        vista_actual = st.session_state.get("vista", "DASHBOARD")
+
+        # Dashboard primero
+        active_db = vista_actual == "DASHBOARD"
+        lbl_db = "📊  Dashboard" + ("  ←" if active_db else "")
+        if st.button(lbl_db, key="nav_DASHBOARD"):
+            st.session_state.vista = "DASHBOARD"
+            st.rerun()
+
+        st.markdown("<hr style='border-color:#1C1C2E;margin:6px 0;'>", unsafe_allow_html=True)
 
         for estado in ORDEN_SIDEBAR:
             cfg = ESTADOS[estado]
@@ -737,7 +1100,7 @@ def render_sidebar(conteos):
                 st.session_state.vista = estado
                 st.rerun()
 
-        st.markdown("<hr style='border-color:#1C1C2E;margin:10px 0;'>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color:#1C1C2E;margin:6px 0;'>", unsafe_allow_html=True)
 
         if st.button("📋  Ordenes", key="nav_ordenes"):
             st.session_state.vista = "ORDENES"
@@ -948,13 +1311,15 @@ def main():
 
 
     if "vista" not in st.session_state:
-        st.session_state.vista = "URGENTE"
+        st.session_state.vista = "DASHBOARD"
 
     render_sidebar(conteos)
 
-    vista = st.session_state.get("vista", "URGENTE")
+    vista = st.session_state.get("vista", "DASHBOARD")
 
-    if vista == "ORDENES":
+    if vista == "DASHBOARD":
+        vista_dashboard(df, ordenes)
+    elif vista == "ORDENES":
         vista_ordenes(ordenes, client)
     elif vista in ESTADOS:
         if df.empty:
