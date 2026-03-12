@@ -261,13 +261,14 @@ def leer_ord(_c):
 def guardar_orden(client, o):
     ws = get_ws(client, HOJA_ORDENES)
     if not ws:
+        st.error("No se pudo acceder a Ordenes_Produccion. Verifica que la hoja exista en el Sheet.")
         return False
     try:
         ws.append_row([o["id"], o["fecha"], o["sku"], o["producto"], o["variante"],
                        o["cantidad"], o["fecha_limite"], "pendiente", o.get("notas", "")])
         return True
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error("Error al guardar: " + str(e))
         return False
 
 
