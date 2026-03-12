@@ -219,9 +219,9 @@ def check_login():
             unsafe_allow_html=True,
         )
         
-       _, col, _ = st.columns([1, 2, 1])
+        _, col, _ = st.columns([1, 2, 1])
         with col:
-            # Botón oficial de Google usando components.html para evitar que Streamlit lo desactive
+            # Botón oficial de Google usando components.html
             google_button_html = f"""
             <div style="display: flex; justify-content: center; font-family: 'DM Sans', Roboto, sans-serif; padding-top: 5px;">
                 <a href="{login_url}" target="_top" style="
@@ -256,6 +256,60 @@ def check_login():
             st.components.v1.html(google_button_html, height=60)
             
         st.stop()
+
+    else:
+        # --- DE REGRESO DE GOOGLE ---
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": auth_code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+        
+        response = requests.post(token_url, data=data)
+        
+        if response.status_code == 200:
+            tokens = response.json()
+            access_token = tokens.get("access_token")
+            
+            user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            user_info_response = requests.get(user_info_url, headers=headers)
+            
+            if user_info_response.status_code == 200:
+                user_info = user_info_response.json()
+                user_email = user_info.get("email", "").lower()
+                user_domain = user_email.split("@")[-1] if "@" in user_email else ""
+                
+                # Cerradura Doble
+                allowed_domains = [d.strip().lower() for d in st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",") if d.strip()]
+                allowed_emails  = [e.strip().lower() for e in st.secrets.get("ALLOWED_EMAILS", "").split(",") if e.strip()]
+                
+                autorizado = (user_domain in allowed_domains) or (user_email in allowed_emails)
+                
+                if not autorizado:
+                    st.error(f"Acceso denegado: {user_email}. Solo cuentas @terretsports.com y @terret.co.")
+                    st.query_params.clear() 
+                    if st.button("Probar con otra cuenta"):
+                        st.rerun()
+                    st.stop()
+                
+                # ¡ÉXITO!
+                st.session_state.logged_in = True
+                st.session_state.user_email = user_email
+                st.session_state.user_name = user_info.get("name", "")
+                
+                st.query_params.clear()
+                st.rerun() 
+                
+        else:
+            st.error("La sesión ha expirado o hubo un error de conexión con Google.")
+            st.query_params.clear()
+            if st.button("Volver a intentar"):
+                st.rerun()
+            st.stop()
 
 
 # ── SHEETS ───────────────────────────────────────────────────────────────────
