@@ -1317,9 +1317,33 @@ def render_sidebar(conteos):
 
         st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-        if st.button("🔄  Actualizar datos", key="btn_refresh"):
+        if st.button("🔄  Refrescar pantalla", key="btn_refresh"):
             st.cache_data.clear()
             st.rerun()
+
+        if st.button("⚡ Sincronizar Shopify", key="btn_sync"):
+            if not WEBAPP_URL:
+                st.error("Falta la WEBAPP_URL en los secrets de Streamlit.")
+            else:
+                with st.spinner("Sincronizando con Shopify... esto puede tomar 1 o 2 minutos."):
+                    try:
+                        # Hacemos la llamada al Web App de Google
+                        respuesta = requests.post(WEBAPP_URL, json={"accion": "actualizarTodo"}, timeout=150)
+                        
+                        if respuesta.status_code == 200:
+                            data = respuesta.json()
+                            if data.get("ok"):
+                                st.success("¡Sincronización exitosa!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("Error en Apps Script: " + data.get("error", "Desconocido"))
+                        else:
+                            st.error("Error de conexión con Google.")
+                    except requests.exceptions.Timeout:
+                        st.warning("La sincronización está tomando mucho tiempo, pero sigue en proceso. Refresca la pantalla en un minuto.")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
         st.markdown(
             "<div style='margin-top:8px;font-size:9px;color:#C8C2B4;padding:0 4px;'>"
