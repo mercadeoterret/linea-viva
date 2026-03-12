@@ -174,37 +174,42 @@ hr { border-color: #D4CFC4 !important; }
 
 # ── LOGIN ────────────────────────────────────────────────────────────────────
 
+import streamlit as st
+import urllib.parse
+import requests
+
+# ── LOGIN NATIVO (SIN IFRAMES) ───────────────────────────────────────────────
+
 def check_login():
-    from streamlit_google_auth import Authenticate
+    # 1. Si el usuario ya inició sesión en esta pestaña, continuamos normal
+    if st.session_state.get("logged_in"):
+        return
 
-    allowed_raw = st.secrets.get("ALLOWED_EMAILS", "")
-    allowed_emails = [e.strip().lower() for e in allowed_raw.split(",") if e.strip()]
+    # Extraemos credenciales
+    client_id = st.secrets.get("GOOGLE_CLIENT_ID", "")
+    client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET", "")
+    redirect_uri = st.secrets.get("REDIRECT_URI", "https://linea-viva-gklx8ezcupejpncx2nzpjw.streamlit.app/")
 
-    # Crear archivo JSON temporal con credenciales OAuth
-    import json, tempfile, os
-    creds_dict = {
-        "web": {
-            "client_id":     st.secrets.get("GOOGLE_CLIENT_ID", ""),
-            "client_secret": st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
-            "redirect_uris": [st.secrets.get("REDIRECT_URI", "http://localhost:8501")],
-            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-            "token_uri":     "https://oauth2.googleapis.com/token",
+    # 2. Revisamos si venimos de regreso desde Google con un código en la URL
+    # (Usamos el nuevo sistema de query_params de Streamlit)
+    query_params = st.query_params
+    auth_code = query_params.get("code")
+
+    if not auth_code:
+        # --- PANTALLA DE INICIO DE SESIÓN ---
+        # Armamos el link oficial de Google
+        auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "access_type": "offline",
+            "prompt": "select_account"
         }
-    }
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
-    json.dump(creds_dict, tmp)
-    tmp.close()
+        login_url = f"{auth_url}?{urllib.parse.urlencode(params)}"
 
-    authenticator = Authenticate(
-        secret_credentials_path=tmp.name,
-        redirect_uri=st.secrets.get("REDIRECT_URI", "http://localhost:8501"),
-        cookie_name="linea_viva_auth",
-        cookie_key=st.secrets.get("COOKIE_KEY", "lv_cookie_secret_2024"),
-    )
-
-    authenticator.check_authentification()
-
-    if not st.session_state.get("connected"):
+        # Renderizamos tu diseño visual
         st.markdown(
             "<div style='max-width:360px;margin:80px auto;text-align:center;'>"
             "<div style='background:#2D6A4F;width:56px;height:56px;border-radius:10px;"
@@ -218,35 +223,71 @@ def check_login():
             "</div>",
             unsafe_allow_html=True,
         )
+        
         _, col, _ = st.columns([1, 2, 1])
         with col:
-            authenticator.login()
-        st.stop()
+            # Usamos st.link_button para forzar al navegador a ir a la URL sin iframes
+            st.link_button("🔑 INICIAR SESIÓN CON GOOGLE", login_url, use_container_width=True)
+            
+        st.stop() # Detenemos la app hasta que hagan clic y vuelvan
 
-    # Verificar dominio autorizado
-    user_email  = st.session_state.get("user_info", {}).get("email", "").lower()
-    user_domain = user_email.split("@")[-1] if "@" in user_email else ""
-
-    allowed_domains = [d.strip().lower() for d in
-                       st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",")
-                       if d.strip()]
-    allowed_emails  = [e.strip().lower() for e in
-                       st.secrets.get("ALLOWED_EMAILS", "").split(",")
-                       if e.strip()]
-
-    autorizado = (user_domain in allowed_domains) or (user_email in allowed_emails)
-
-    if not autorizado:
-        st.error("Acceso no autorizado: " + user_email +
-                 ". Solo cuentas @terretsports.com y @terret.co.")
-        if st.button("Cerrar sesion"):
-            authenticator.logout()
-            st.rerun()
-        st.stop()
-
-    st.session_state.logged_in  = True
-    st.session_state.user_email = user_email
-    st.session_state.user_name  = st.session_state.get("user_info", {}).get("name", "")
+    else:
+        # --- DE REGRESO DE GOOGLE ---
+        # 3. Intercambiamos el 'código' por un Token de Acceso real
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": auth_code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+        
+        response = requests.post(token_url, data=data)
+        
+        if response.status_code == 200:
+            tokens = response.json()
+            access_token = tokens.get("access_token")
+            
+            # 4. Le pedimos a Google los datos del usuario usando el Token
+            user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            user_info_response = requests.get(user_info_url, headers=headers)
+            
+            if user_info_response.status_code == 200:
+                user_info = user_info_response.json()
+                user_email = user_info.get("email", "").lower()
+                user_domain = user_email.split("@")[-1] if "@" in user_email else ""
+                
+                # 5. La Cerradura Doble: Verificamos los dominios permitidos
+                allowed_domains = [d.strip().lower() for d in st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",") if d.strip()]
+                allowed_emails  = [e.strip().lower() for e in st.secrets.get("ALLOWED_EMAILS", "").split(",") if e.strip()]
+                
+                autorizado = (user_domain in allowed_domains) or (user_email in allowed_emails)
+                
+                if not autorizado:
+                    st.error(f"Acceso denegado: {user_email}. Solo cuentas @terretsports.com y @terret.co.")
+                    st.query_params.clear() # Limpiamos la URL
+                    if st.button("Probar con otra cuenta"):
+                        st.rerun()
+                    st.stop()
+                
+                # ¡ÉXITO! Guardamos todo en la sesión
+                st.session_state.logged_in = True
+                st.session_state.user_email = user_email
+                st.session_state.user_name = user_info.get("name", "")
+                
+                # Limpiamos el código largo de la barra de direcciones por estética
+                st.query_params.clear()
+                st.rerun() # Recargamos para mostrar el dashboard
+                
+        else:
+            # Si el código expiró (pasa si recargan la página a la mitad)
+            st.error("La sesión ha expirado o hubo un error de conexión con Google.")
+            st.query_params.clear()
+            if st.button("Volver a intentar"):
+                st.rerun()
+            st.stop()
 
 
 # ── SHEETS ───────────────────────────────────────────────────────────────────
