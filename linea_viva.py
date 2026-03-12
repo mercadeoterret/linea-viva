@@ -493,8 +493,10 @@ def agrupar(df, estado):
     if sub.empty:
         return {}
     
-    resultado = {}
-    for tipo, dt in sub.groupby("Tipo", sort=True):
+    resultado_temp = {}
+    
+    # Cambiamos sort=True a sort=False para evitar el orden alfabético forzado
+    for tipo, dt in sub.groupby("Tipo", sort=False):
         grupos = []
         for prod, g in dt.groupby("Producto", sort=False):
             g = g.copy()
@@ -510,9 +512,25 @@ def agrupar(df, estado):
                 "n":            len(g),
             })
             
-        grupos = sorted(grupos, key=lambda x: (-x["ventas_total"], x["dias_min"]))
-        resultado[tipo] = grupos
+        # 1. ORDENAR PRODUCTOS: Mayor venta total -> Menos días de inventario -> Alfabético
+        grupos = sorted(grupos, key=lambda x: (-x["ventas_total"], x["dias_min"], x["producto"]))
         
+        # Calcular métricas totales de la categoría para priorizar bloques
+        ventas_cat = sum(x["ventas_total"] for x in grupos)
+        dias_cat = min((x["dias_min"] for x in grupos), default=9999)
+        
+        resultado_temp[tipo] = {
+            "grupos": grupos,
+            "ventas_cat": ventas_cat,
+            "dias_cat": dias_cat
+        }
+        
+    # 2. ORDENAR CATEGORÍAS: Bloques con más ventas y menor inventario van primero
+    tipos_ordenados = sorted(resultado_temp.items(), key=lambda item: (-item[1]["ventas_cat"], item[1]["dias_cat"]))
+    
+    # Reconstruir el diccionario (Python respeta el orden de inserción)
+    resultado = {tipo: datos["grupos"] for tipo, datos in tipos_ordenados}
+    
     return resultado
 
 
