@@ -13,7 +13,7 @@ import urllib.parse
 import uuid
 import plotly.graph_objects as go
 import plotly.express as px
-from streamlit_google_auth import Authenticate
+import requests
 
 st.set_page_config(
     page_title="Linea Viva · Terret",
@@ -32,6 +32,7 @@ WEBAPP_URL       = st.secrets.get("WEBAPP_URL", "")
 FABRICACION_DIAS = 30   # lead time conservador (rango 20-30 dias)
 UMBRAL_BS        = 25   # umbral best seller (ESTRELLA segun reglas)
 LEAD_TIME_DIAS   = 30
+
 
 # ── REGLAS ───────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ def calcular_estado(stock, ventas60d, dias_inv):
     # ventas 1-3 con cobertura <= 90d — rota poco pero no es urgente
     return "MONITOREAR"
 
+
 ESTADOS = {
     "REPROGRAMAR":   {"icon": "⚡", "label": "Reprogramar",   "color": "#FF3B30", "desc": "Cobertura <= 30 dias con ventas activas, o quiebre. Pedir ya."},
     "ESTRELLA":      {"icon": "⭐", "label": "Estrella",      "color": "#2D6A4F", "desc": "Ventas >= 25 en 60d. Best seller — nunca dejar sin stock."},
@@ -88,6 +90,7 @@ ESTADOS = {
 }
 
 ORDEN_SIDEBAR = ["REPROGRAMAR", "ESTRELLA", "ALTA_ROTACION", "SOBRESTOCK", "SALUDABLE", "MONITOREAR", "LIQUIDAR", "HUECO"]
+
 
 # ── CSS GLOBAL ───────────────────────────────────────────────────────────────
 
@@ -172,12 +175,6 @@ hr { border-color: #D4CFC4 !important; }
 """, unsafe_allow_html=True)
 
 
-# ── LOGIN ────────────────────────────────────────────────────────────────────
-
-import streamlit as st
-import urllib.parse
-import requests
-
 # ── LOGIN NATIVO (SIN IFRAMES) ───────────────────────────────────────────────
 
 def check_login():
@@ -191,13 +188,11 @@ def check_login():
     redirect_uri = st.secrets.get("REDIRECT_URI", "https://linea-viva-gklx8ezcupejpncx2nzpjw.streamlit.app/")
 
     # 2. Revisamos si venimos de regreso desde Google con un código en la URL
-    # (Usamos el nuevo sistema de query_params de Streamlit)
     query_params = st.query_params
     auth_code = query_params.get("code")
 
     if not auth_code:
         # --- PANTALLA DE INICIO DE SESIÓN ---
-        # Armamos el link oficial de Google
         auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
         params = {
             "client_id": client_id,
@@ -224,12 +219,9 @@ def check_login():
             unsafe_allow_html=True,
         )
         
-        # (Esto va justo debajo de donde renderizas tu diseño visual "LV LINEA VIVA")
-        
         _, col, _ = st.columns([1, 2, 1])
         with col:
             # Botón oficial de Google usando HTML
-            # ¡OJO A ESTA PRIMERA LÍNEA! Cambiamos target="_self" por target="_top"
             google_button_html = f"""
             <a href="{login_url}" target="_top" style="text-decoration: none;">
                 <div style="
@@ -268,7 +260,6 @@ def check_login():
 
     else:
         # --- DE REGRESO DE GOOGLE ---
-        # 3. Intercambiamos el 'código' por un Token de Acceso real
         token_url = "https://oauth2.googleapis.com/token"
         data = {
             "code": auth_code,
@@ -284,7 +275,6 @@ def check_login():
             tokens = response.json()
             access_token = tokens.get("access_token")
             
-            # 4. Le pedimos a Google los datos del usuario usando el Token
             user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
             headers = {"Authorization": f"Bearer {access_token}"}
             user_info_response = requests.get(user_info_url, headers=headers)
@@ -294,7 +284,7 @@ def check_login():
                 user_email = user_info.get("email", "").lower()
                 user_domain = user_email.split("@")[-1] if "@" in user_email else ""
                 
-                # 5. La Cerradura Doble: Verificamos los dominios permitidos
+                # Cerradura Doble
                 allowed_domains = [d.strip().lower() for d in st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",") if d.strip()]
                 allowed_emails  = [e.strip().lower() for e in st.secrets.get("ALLOWED_EMAILS", "").split(",") if e.strip()]
                 
@@ -302,22 +292,20 @@ def check_login():
                 
                 if not autorizado:
                     st.error(f"Acceso denegado: {user_email}. Solo cuentas @terretsports.com y @terret.co.")
-                    st.query_params.clear() # Limpiamos la URL
+                    st.query_params.clear() 
                     if st.button("Probar con otra cuenta"):
                         st.rerun()
                     st.stop()
                 
-                # ¡ÉXITO! Guardamos todo en la sesión
+                # ¡ÉXITO!
                 st.session_state.logged_in = True
                 st.session_state.user_email = user_email
                 st.session_state.user_name = user_info.get("name", "")
                 
-                # Limpiamos el código largo de la barra de direcciones por estética
                 st.query_params.clear()
-                st.rerun() # Recargamos para mostrar el dashboard
+                st.rerun() 
                 
         else:
-            # Si el código expiró (pasa si recargan la página a la mitad)
             st.error("La sesión ha expirado o hubo un error de conexión con Google.")
             st.query_params.clear()
             if st.button("Volver a intentar"):
@@ -412,7 +400,6 @@ def escribir_reporte(client, sub_df):
     """
     Sobreescribe Reporte_Urgente con los datos actuales para que
     Apps Script los lea y genere el PDF + email.
-    Columnas: Producto | Tipo | Variante | SKU | Stock | Dias | Ventas60d | Sugerido | Estado
     """
     ws = get_ws(client, HOJA_REPORTE)
     if not ws:
@@ -586,7 +573,7 @@ def color_borde(estado):
 
 # ── SUGERENCIA DE REPOSICION ─────────────────────────────────────────────────
 
-DIAS_OBJETIVO   = 60   # meta de cobertura en dias (estandar moda deportiva)
+DIAS_OBJETIVO    = 60   # meta de cobertura en dias (estandar moda deportiva)
 DIAS_FABRICACION = 20  # tiempo de entrega del proveedor
 MULTIPLO        = 6    # redondear al multiplo mas cercano (media docena)
 
