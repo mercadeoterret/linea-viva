@@ -835,31 +835,46 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
 
 # ── VISTA DASHBOARD ───────────────────────────────────────────────────────────
 
+# ── VISTA DASHBOARD ───────────────────────────────────────────────────────────
+
 def vista_dashboard(df, ordenes_df):
     if df.empty:
         st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
         return
 
-    # --- INICIO MAGIA DE SUCURSALES ---
-    # Buscamos las columnas nuevas creadas por Apps Script
-    cols_sucursales = [c for c in df.columns if str(c).startswith("Stock ") and c not in ["Stock Actual", "Stock Minimo", "Stock"]]
+    # --- INICIO MAGIA DE SUCURSALES Y TIPO DE STOCK ---
+    cols_sucursales = [c for c in df.columns if str(c).startswith("Stock ") and c not in ["Stock Actual", "Stock Minimo", "Stock", "Stock Fisico Total"]]
     
     if cols_sucursales:
         nombres_sucursales = [c.replace("Stock ", "") for c in cols_sucursales]
         
-        # Selector discreto arriba del dashboard
-        sucursal_sel = st.selectbox("📍 Filtrar inventario por sucursal:", ["Todas las sucursales"] + nombres_sucursales)
+        # UI: Controles en dos columnas
+        c1, c2 = st.columns(2)
+        with c1:
+            sucursal_sel = st.selectbox("📍 Filtrar por sucursal:", ["Todas las sucursales"] + nombres_sucursales)
+        with c2:
+            tipo_inv = st.radio("📊 Tipo de inventario:", ["Disponible (Venta/Reposición)", "Físico (Contable/Real)"], horizontal=True)
+            
+        df = df.copy()
         
-        if sucursal_sel != "Todas las sucursales":
-            df = df.copy() # Copia segura para no afectar la barra lateral ni otras vistas
-            col_elegida = "Stock " + sucursal_sel
-            
-            # Reemplazamos el stock general con el de la sucursal seleccionada
-            df["Stock"] = pd.to_numeric(df[col_elegida], errors="coerce").fillna(0)
-            
-            # Recalculamos el valor de inventario solo para esta vista
-            df["_valor_costo"] = df["Stock"] * df["Costo"]
-            df["_valor_venta"] = df["Stock"] * df["Precio Venta"]
+        # Determinar qué columna de Google Sheets usar según lo que elija el usuario
+        if sucursal_sel == "Todas las sucursales":
+            if "Físico" in tipo_inv:
+                col_usar = "Stock Fisico Total" if "Stock Fisico Total" in df.columns else "Stock"
+            else:
+                col_usar = "Stock" # El disponible global
+        else:
+            if "Físico" in tipo_inv:
+                col_usar = "Fisico " + sucursal_sel
+            else:
+                col_usar = "Stock " + sucursal_sel
+                
+        # Inyectamos la columna elegida para que todo el dashboard la use
+        df["Stock"] = pd.to_numeric(df.get(col_usar, df["Stock"]), errors="coerce").fillna(0)
+        df["_valor_costo"] = df["Stock"] * df["Costo"]
+        df["_valor_venta"] = df["Stock"] * df["Precio Venta"]
+        
+        st.markdown("<hr style='border-color:#D4CFC4;margin:10px 0 20px 0;'>", unsafe_allow_html=True)
     # --- FIN MAGIA DE SUCURSALES ---
 
     tiene_costos = df["Costo"].sum() > 0
