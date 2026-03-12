@@ -72,6 +72,8 @@ ESTADOS = {
     "HUECO":         {"icon": "⚪", "label": "Hueco",         "color": "#3A3A5C", "desc": "Stock 0 y ventas 0. Posiblemente descontinuado."},
 }
 
+ORDEN_SIDEBAR = ["REPROGRAMAR", "ESTRELLA", "ALTA_ROTACION", "SALUDABLE", "LIQUIDAR", "HUECO"]
+
 # ── CSS GLOBAL ───────────────────────────────────────────────────────────────
 
 st.markdown("""
@@ -943,8 +945,7 @@ def main():
     if not df.empty:
         for estado in ESTADOS:
             conteos[estado] = int(df[df["_estado"] == estado]["Producto"].nunique())
-    # Orden de prioridad en sidebar
-    ORDEN_SIDEBAR = ["REPROGRAMAR","ESTRELLA","ALTA_ROTACION","SALUDABLE","LIQUIDAR","HUECO"]
+
 
     if "vista" not in st.session_state:
         st.session_state.vista = "URGENTE"
