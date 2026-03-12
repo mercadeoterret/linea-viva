@@ -180,13 +180,26 @@ def check_login():
     allowed_raw = st.secrets.get("ALLOWED_EMAILS", "")
     allowed_emails = [e.strip().lower() for e in allowed_raw.split(",") if e.strip()]
 
+    # Crear archivo JSON temporal con credenciales OAuth
+    import json, tempfile, os
+    creds_dict = {
+        "web": {
+            "client_id":     st.secrets.get("GOOGLE_CLIENT_ID", ""),
+            "client_secret": st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
+            "redirect_uris": [st.secrets.get("REDIRECT_URI", "http://localhost:8501")],
+            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
+            "token_uri":     "https://oauth2.googleapis.com/token",
+        }
+    }
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+    json.dump(creds_dict, tmp)
+    tmp.close()
+
     authenticator = Authenticate(
-        secret_credentials_path=None,
+        secret_credentials_path=tmp.name,
+        redirect_uri=st.secrets.get("REDIRECT_URI", "http://localhost:8501"),
         cookie_name="linea_viva_auth",
         cookie_key=st.secrets.get("COOKIE_KEY", "lv_cookie_secret_2024"),
-        redirect_uri=st.secrets.get("REDIRECT_URI", "http://localhost:8501"),
-        client_id=st.secrets.get("GOOGLE_CLIENT_ID", ""),
-        client_secret=st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
     )
 
     authenticator.check_authentification()
