@@ -489,31 +489,31 @@ def preparar(df):
 
 
 def agrupar(df, estado):
-    sub = df[df["_estado"] == estado]
-    if sub.empty:
-        return {}
-    resultado = {}
-    for tipo, dt in sub.groupby("Tipo", sort=True):
-        grupos = []
-        for prod, g in dt.groupby("Producto", sort=False):
-            g = g.copy()
-            g["_dias_sort"] = pd.to_numeric(g["DiasInv"], errors="coerce").fillna(9999)
-            g = g.sort_values("_dias_sort")
-            grupos.append({
-                "producto":   prod,
-                "es_bs":      bool(g["_bs"].any()),
-                "ventas_max": float(g["Ventas60d"].max()),
-                "ventas_total": float(g["Ventas60d"].sum()), # Suma total de ventas del producto
-                "dias_min":   float(g["_dias_sort"].min()),  # El inventario más crítico
-                "variantes":  g,
-                "n":          len(g),
-            })
-        # Ordena de mayor prioridad a menor: 
-        # 1. Mayor venta total en 60d (-x["ventas_total"] para descendente)
-        # 2. Menos días de inventario (x["dias_min"] para ascendente)
-        grupos = sorted(grupos, key=lambda x: (-x["ventas_total"], x["dias_min"]))
-        resultado[tipo] = grupos
-    return resultado
+    sub = df[df["_estado"] == estado]
+    if sub.empty:
+        return {}
+    
+    resultado = {}
+    for tipo, dt in sub.groupby("Tipo", sort=True):
+        grupos = []
+        for prod, g in dt.groupby("Producto", sort=False):
+            g = g.copy()
+            g["_dias_sort"] = pd.to_numeric(g["DiasInv"], errors="coerce").fillna(9999)
+            g = g.sort_values("_dias_sort")
+            grupos.append({
+                "producto":     prod,
+                "es_bs":        bool(g["_bs"].any()),
+                "ventas_max":   float(g["Ventas60d"].max()),
+                "ventas_total": float(g["Ventas60d"].sum()),
+                "dias_min":     float(g["_dias_sort"].min()),
+                "variantes":    g,
+                "n":            len(g),
+            })
+            
+        grupos = sorted(grupos, key=lambda x: (-x["ventas_total"], x["dias_min"]))
+        resultado[tipo] = grupos
+        
+    return resultado
 
 
 # ── HELPERS DE COLOR ─────────────────────────────────────────────────────────
