@@ -836,15 +836,38 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
 # ── VISTA DASHBOARD ───────────────────────────────────────────────────────────
 
 def vista_dashboard(df, ordenes_df):
-    if df.empty:
-        st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
-        return
+    if df.empty:
+        st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
+        return
 
-    tiene_costos = df["Costo"].sum() > 0
-    tiene_precios = df["Precio Venta"].sum() > 0
+    # --- INICIO MAGIA DE SUCURSALES ---
+    # Buscamos las columnas nuevas creadas por Apps Script
+    cols_sucursales = [c for c in df.columns if str(c).startswith("Stock ") and c not in ["Stock Actual", "Stock Minimo", "Stock"]]
+    
+    if cols_sucursales:
+        nombres_sucursales = [c.replace("Stock ", "") for c in cols_sucursales]
+        
+        # Selector discreto arriba del dashboard
+        sucursal_sel = st.selectbox("📍 Filtrar inventario por sucursal:", ["Todas las sucursales"] + nombres_sucursales)
+        
+        if sucursal_sel != "Todas las sucursales":
+            df = df.copy() # Copia segura para no afectar la barra lateral ni otras vistas
+            col_elegida = "Stock " + sucursal_sel
+            
+            # Reemplazamos el stock general con el de la sucursal seleccionada
+            df["Stock"] = pd.to_numeric(df[col_elegida], errors="coerce").fillna(0)
+            
+            # Recalculamos el valor de inventario solo para esta vista
+            df["_valor_costo"] = df["Stock"] * df["Costo"]
+            df["_valor_venta"] = df["Stock"] * df["Precio Venta"]
+    # --- FIN MAGIA DE SUCURSALES ---
 
-    # ── HEADER ────────────────────────────────────────────────────────────────
-    st.markdown(
+    tiene_costos = df["Costo"].sum() > 0
+    tiene_precios = df["Precio Venta"].sum() > 0
+
+    # ── HEADER ────────────────────────────────────────────────────────────────
+    st.markdown(
+        "<div style='font-family:Bebas Neue,sans-serif;font-size:26px;"
         "<div style='font-family:Bebas Neue,sans-serif;font-size:26px;"
         "letter-spacing:3px;color:#1A1A14;margin-bottom:4px;'>DASHBOARD</div>"
         "<div style='font-size:11px;color:#6B6456;letter-spacing:1px;"
