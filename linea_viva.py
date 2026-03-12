@@ -228,9 +228,10 @@ def check_login():
         
         _, col, _ = st.columns([1, 2, 1])
         with col:
-            # Botón oficial de Google usando HTML y el logo en SVG nativo
+            # Botón oficial de Google usando HTML
+            # ¡OJO A ESTA PRIMERA LÍNEA! Cambiamos target="_self" por target="_top"
             google_button_html = f"""
-            <a href="{login_url}" target="_self" style="text-decoration: none;">
+            <a href="{login_url}" target="_top" style="text-decoration: none;">
                 <div style="
                     display: flex; 
                     align-items: center; 
@@ -263,7 +264,7 @@ def check_login():
             """
             st.markdown(google_button_html, unsafe_allow_html=True)
             
-        st.stop() # Detenemos la app hasta que hagan clic y vuelvan
+        st.stop()
 
     else:
         # --- DE REGRESO DE GOOGLE ---
