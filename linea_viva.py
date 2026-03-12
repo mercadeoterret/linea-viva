@@ -847,10 +847,9 @@ def vista_dashboard(df, ordenes_df):
             )
         else:
             # Truncar nombres largos
-            criticos["nombre_corto"] = criticos["Producto"].str[:30]
             fig_bar = go.Figure(go.Bar(
                 x=criticos["dias_min"],
-                y=criticos["nombre_corto"],
+                y=criticos["Producto"],
                 orientation="h",
                 marker=dict(
                     color=criticos["dias_min"],
@@ -866,14 +865,14 @@ def vista_dashboard(df, ordenes_df):
                 paper_bgcolor="#0F0F1A",
                 plot_bgcolor="#0F0F1A",
                 font=dict(color="#E2E2F0", family="DM Sans"),
-                margin=dict(t=10, b=10, l=10, r=60),
-                height=280,
+                margin=dict(t=10, b=10, l=180, r=60),
+                height=310,
                 xaxis=dict(
                     showgrid=True, gridcolor="#1C1C2E",
                     zeroline=False, showticklabels=False,
                     range=[0, max(criticos["dias_min"].max() * 1.3, 35)],
                 ),
-                yaxis=dict(showgrid=False, tickfont=dict(size=9)),
+                yaxis=dict(showgrid=False, tickfont=dict(size=10), automargin=True),
                 shapes=[dict(
                     type="line", x0=LEAD_TIME_DIAS, x1=LEAD_TIME_DIAS,
                     y0=-0.5, y1=len(criticos) - 0.5,
@@ -899,8 +898,6 @@ def vista_dashboard(df, ordenes_df):
         )
         top_ventas = df.groupby("Producto")["Ventas60d"].sum().reset_index()
         top_ventas = top_ventas.sort_values("Ventas60d", ascending=True).tail(10)
-        top_ventas["nombre_corto"] = top_ventas["Producto"].str[:30]
-
         # Color segun si es estrella o no
         estado_prod = df.groupby("Producto")["_estado"].first().to_dict()
         colores_v = [
@@ -911,7 +908,7 @@ def vista_dashboard(df, ordenes_df):
 
         fig_top = go.Figure(go.Bar(
             x=top_ventas["Ventas60d"],
-            y=top_ventas["nombre_corto"],
+            y=top_ventas["Producto"],
             orientation="h",
             marker=dict(color=colores_v),
             text=top_ventas["Ventas60d"].astype(int).astype(str) + " u",
@@ -923,10 +920,14 @@ def vista_dashboard(df, ordenes_df):
             paper_bgcolor="#0F0F1A",
             plot_bgcolor="#0F0F1A",
             font=dict(color="#E2E2F0", family="DM Sans"),
-            margin=dict(t=10, b=10, l=10, r=60),
-            height=300,
+            margin=dict(t=10, b=10, l=220, r=70),
+            height=340,
             xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False, showticklabels=False),
-            yaxis=dict(showgrid=False, tickfont=dict(size=9)),
+            yaxis=dict(
+                showgrid=False,
+                tickfont=dict(size=10),
+                automargin=True,
+            ),
         )
         st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
 
