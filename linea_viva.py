@@ -1155,8 +1155,14 @@ def render_sidebar(conteos):
             st.session_state.vista = "ORDENES"
             st.rerun()
 
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+        if st.button("🔄  Actualizar datos", key="btn_refresh"):
+            st.cache_data.clear()
+            st.rerun()
+
         st.markdown(
-            "<div style='margin-top:20px;font-size:9px;color:#2A2A3E;padding:0 4px;'>"
+            "<div style='margin-top:8px;font-size:9px;color:#2A2A3E;padding:0 4px;'>"
             + datetime.now().strftime("%d/%m/%Y %H:%M") +
             "</div>",
             unsafe_allow_html=True,
