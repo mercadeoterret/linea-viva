@@ -36,9 +36,8 @@ LEAD_TIME_DIAS   = 30
 
 def calcular_estado(stock, ventas60d, dias_inv):
     """
-    Logica fiel a Segmentacion_Bot_Inventarios.rtf de Terret.
-    cob = dias_inv (cobertura actual en dias)
-    LEAD_TIME_DIAS = 30 (conservador, rango real 20-30d)
+    Logica expandida — base RTF + ajustes de negocio Terret.
+    LEAD_TIME_DIAS = 30d (conservador, rango real 20-30d)
     """
     try:
         s = float(stock)
@@ -48,33 +47,46 @@ def calcular_estado(stock, ventas60d, dias_inv):
     except:
         return "HUECO"
 
-    # Casos especiales — tienen prioridad sobre todo
+    # ── Casos especiales — prioridad absoluta ────────────────────────────────
     if s == 0 and v == 0:
         return "HUECO"
-    if s > 0 and v == 0:
+
+    # Liquidar: pocas ventas con exceso de stock — capital inmovilizado
+    if v <= 3 and cob > 90:
         return "LIQUIDAR"
+
+    # Reprogramar: quiebre o cobertura critica con ventas activas
     if (cob <= LEAD_TIME_DIAS and v > 3) or (s == 0 and v > 0):
         return "REPROGRAMAR"
 
-    # Segmentacion base por volumen de ventas
+    # ── Segmentacion por volumen de ventas ───────────────────────────────────
     if v >= 25:
-        return "ESTRELLA"
-    if v >= 10:
-        return "ALTA_ROTACION"
+        return "ESTRELLA" if cob <= 120 else "SOBRESTOCK"
 
-    # Todo lo demas con ventas 1-9 y cobertura OK
-    return "SALUDABLE"
+    if v >= 10:
+        return "ALTA_ROTACION" if cob <= 120 else "SOBRESTOCK"
+
+    # ── Rotacion baja (ventas 4-9) ───────────────────────────────────────────
+    if v >= 4:
+        if cob <= 90:
+            return "SALUDABLE"
+        return "MONITOREAR"
+
+    # ventas 1-3 con cobertura <= 90d — rota poco pero no es urgente
+    return "MONITOREAR"
 
 ESTADOS = {
     "REPROGRAMAR":   {"icon": "⚡", "label": "Reprogramar",   "color": "#FF3B30", "desc": "Cobertura <= 30 dias con ventas activas, o quiebre. Pedir ya."},
-    "LIQUIDAR":      {"icon": "📦", "label": "Liquidar",      "color": "#FF6B35", "desc": "Stock > 0 pero ventas = 0. Precio especial o retiro."},
-    "SALUDABLE":     {"icon": "✅", "label": "Saludable",     "color": "#00C853", "desc": "Stock OK. Sin accion requerida."},
-    "ALTA_ROTACION": {"icon": "🔥", "label": "Alta Rotacion", "color": "#FFB800", "desc": "Ventas >= 10 en 60d. Monitorear de cerca."},
     "ESTRELLA":      {"icon": "⭐", "label": "Estrella",      "color": "#D4FF00", "desc": "Ventas >= 25 en 60d. Best seller — nunca dejar sin stock."},
+    "ALTA_ROTACION": {"icon": "🔥", "label": "Alta Rotacion", "color": "#FFB800", "desc": "Ventas >= 10 en 60d. Monitorear de cerca."},
+    "SOBRESTOCK":    {"icon": "🔴", "label": "Sobrestock",    "color": "#FF6B35", "desc": "Cobertura > 120 dias. Pausar pedidos."},
+    "SALUDABLE":     {"icon": "✅", "label": "Saludable",     "color": "#00C853", "desc": "Ventas 4-9, cobertura 31-90d. Stock equilibrado."},
+    "MONITOREAR":    {"icon": "👁",  "label": "Monitorear",   "color": "#4488FF", "desc": "Ventas 4-9, cobertura > 90d. Revisar proximo ciclo."},
+    "LIQUIDAR":      {"icon": "📦", "label": "Liquidar",      "color": "#FF9500", "desc": "Ventas <= 3 y cobertura > 90d. Precio especial o retiro."},
     "HUECO":         {"icon": "⚪", "label": "Hueco",         "color": "#3A3A5C", "desc": "Stock 0 y ventas 0. Posiblemente descontinuado."},
 }
 
-ORDEN_SIDEBAR = ["REPROGRAMAR", "ESTRELLA", "ALTA_ROTACION", "SALUDABLE", "LIQUIDAR", "HUECO"]
+ORDEN_SIDEBAR = ["REPROGRAMAR", "ESTRELLA", "ALTA_ROTACION", "SOBRESTOCK", "SALUDABLE", "MONITOREAR", "LIQUIDAR", "HUECO"]
 
 # ── CSS GLOBAL ───────────────────────────────────────────────────────────────
 
@@ -426,10 +438,12 @@ def agrupar(df, estado):
 def color_dias(estado):
     return {
         "REPROGRAMAR":   "#FF3B30",
-        "LIQUIDAR":      "#FF6B35",
-        "SALUDABLE":     "#00C853",
-        "ALTA_ROTACION": "#FFB800",
         "ESTRELLA":      "#D4FF00",
+        "ALTA_ROTACION": "#FFB800",
+        "SOBRESTOCK":    "#FF6B35",
+        "SALUDABLE":     "#00C853",
+        "MONITOREAR":    "#4488FF",
+        "LIQUIDAR":      "#FF9500",
         "HUECO":         "#3A3A5C",
     }.get(estado, "#5A5A7A")
 
@@ -437,10 +451,12 @@ def color_dias(estado):
 def color_borde(estado):
     return {
         "REPROGRAMAR":   "#FF3B30",
-        "LIQUIDAR":      "#FF6B35",
-        "SALUDABLE":     "#00C853",
-        "ALTA_ROTACION": "#FFB800",
         "ESTRELLA":      "#D4FF00",
+        "ALTA_ROTACION": "#FFB800",
+        "SOBRESTOCK":    "#FF6B35",
+        "SALUDABLE":     "#00C853",
+        "MONITOREAR":    "#4488FF",
+        "LIQUIDAR":      "#FF9500",
         "HUECO":         "#3A3A5C",
     }.get(estado, "#3A3A5C")
 
@@ -1120,7 +1136,7 @@ def render_sidebar(conteos):
 def vista_estado(df, ordenes_df, client, estado):
     cfg   = ESTADOS[estado]
     color = cfg["color"]
-    mostrar_form = estado in ("REPROGRAMAR",)
+    mostrar_form = estado == "REPROGRAMAR"
 
     # Banner
     st.markdown(
