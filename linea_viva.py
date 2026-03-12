@@ -26,36 +26,50 @@ ALERTA_EMAIL     = "mercadeo@terretsports.com"
 HOJA_REPORTE     = "Reporte_Urgente"
 # URL del Web App de Apps Script — pegar aqui despues de deployar
 WEBAPP_URL       = st.secrets.get("WEBAPP_URL", "")
-FABRICACION_DIAS = 20
-UMBRAL_BS        = 20
+FABRICACION_DIAS = 30   # lead time conservador (rango 20-30 dias)
+UMBRAL_BS        = 25   # umbral best seller (ESTRELLA segun reglas)
+LEAD_TIME_DIAS   = 30
 
 # ── REGLAS ───────────────────────────────────────────────────────────────────
 
 def calcular_estado(stock, ventas60d, dias_inv):
+    """
+    Logica fiel a Segmentacion_Bot_Inventarios.rtf de Terret.
+    cob = dias_inv (cobertura actual en dias)
+    LEAD_TIME_DIAS = 30 (conservador, rango real 20-30d)
+    """
     try:
         s = float(stock)
         v = float(ventas60d)
         raw = str(dias_inv).lower().strip()
-        d = 9999 if raw in ("inf", "", "nan") else float(raw)
+        cob = 9999 if raw in ("inf", "", "nan") else float(raw)
     except:
-        return "SIN_ACTIVIDAD"
+        return "HUECO"
 
-    if v == 0 and s == 0:        return "SIN_ACTIVIDAD"
-    if s == 0 and v >= 10:       return "URGENTE"
-    if v <= 2:                   return "LIQUIDAR"
-    if v >= 10 and d < 15:       return "URGENTE"
-    if v >= 10 and d <= 60:      return "SALUDABLE"
-    if v >= 10:                  return "MONITOREAR"
-    if 3 <= v <= 9 and d < 15:   return "EVALUAR"
-    return "MONITOREAR"
+    # Casos especiales — tienen prioridad sobre todo
+    if s == 0 and v == 0:
+        return "HUECO"
+    if s > 0 and v == 0:
+        return "LIQUIDAR"
+    if (cob <= LEAD_TIME_DIAS and v > 3) or (s == 0 and v > 0):
+        return "REPROGRAMAR"
+
+    # Segmentacion base por volumen de ventas
+    if v >= 25:
+        return "ESTRELLA"
+    if v >= 10:
+        return "ALTA_ROTACION"
+
+    # Todo lo demas con ventas 1-9 y cobertura OK
+    return "SALUDABLE"
 
 ESTADOS = {
-    "URGENTE":       {"icon": "⚡", "label": "Urgente",        "color": "#FF3B30", "desc": "Quiebre o menos de 15 dias. Pedir esta semana."},
-    "EVALUAR":       {"icon": "⚠️", "label": "Evaluar",        "color": "#FFB800", "desc": "Rotacion baja y stock acabandose. Decision manual."},
-    "MONITOREAR":    {"icon": "👁",  "label": "Monitorear",     "color": "#4488FF", "desc": "Sin accion urgente. Revisar en proximo ciclo."},
-    "LIQUIDAR":      {"icon": "📦", "label": "Liquidar",       "color": "#FF6B35", "desc": "0-2 ventas en 60d. Precio especial o retiro."},
-    "SALUDABLE":     {"icon": "✅", "label": "Saludable",      "color": "#00C853", "desc": "Stock ideal. Sin accion requerida."},
-    "SIN_ACTIVIDAD": {"icon": "⚪", "label": "Sin movimiento", "color": "#3A3A5C", "desc": "Stock 0 y ventas 0. Revisar si archivar."},
+    "REPROGRAMAR":   {"icon": "⚡", "label": "Reprogramar",   "color": "#FF3B30", "desc": "Cobertura <= 30 dias con ventas activas, o quiebre. Pedir ya."},
+    "LIQUIDAR":      {"icon": "📦", "label": "Liquidar",      "color": "#FF6B35", "desc": "Stock > 0 pero ventas = 0. Precio especial o retiro."},
+    "SALUDABLE":     {"icon": "✅", "label": "Saludable",     "color": "#00C853", "desc": "Stock OK. Sin accion requerida."},
+    "ALTA_ROTACION": {"icon": "🔥", "label": "Alta Rotacion", "color": "#FFB800", "desc": "Ventas >= 10 en 60d. Monitorear de cerca."},
+    "ESTRELLA":      {"icon": "⭐", "label": "Estrella",      "color": "#D4FF00", "desc": "Ventas >= 25 en 60d. Best seller — nunca dejar sin stock."},
+    "HUECO":         {"icon": "⚪", "label": "Hueco",         "color": "#3A3A5C", "desc": "Stock 0 y ventas 0. Posiblemente descontinuado."},
 }
 
 # ── CSS GLOBAL ───────────────────────────────────────────────────────────────
@@ -397,21 +411,23 @@ def agrupar(df, estado):
 
 def color_dias(estado):
     return {
-        "URGENTE":    "#FF3B30",
-        "EVALUAR":    "#FFB800",
-        "LIQUIDAR":   "#FFB800",
-        "MONITOREAR": "#4488FF",
-        "SALUDABLE":  "#00C853",
+        "REPROGRAMAR":   "#FF3B30",
+        "LIQUIDAR":      "#FF6B35",
+        "SALUDABLE":     "#00C853",
+        "ALTA_ROTACION": "#FFB800",
+        "ESTRELLA":      "#D4FF00",
+        "HUECO":         "#3A3A5C",
     }.get(estado, "#5A5A7A")
 
 
 def color_borde(estado):
     return {
-        "URGENTE":    "#FF3B30",
-        "EVALUAR":    "#FFB800",
-        "LIQUIDAR":   "#FF6B35",
-        "MONITOREAR": "#4488FF",
-        "SALUDABLE":  "#00C853",
+        "REPROGRAMAR":   "#FF3B30",
+        "LIQUIDAR":      "#FF6B35",
+        "SALUDABLE":     "#00C853",
+        "ALTA_ROTACION": "#FFB800",
+        "ESTRELLA":      "#D4FF00",
+        "HUECO":         "#3A3A5C",
     }.get(estado, "#3A3A5C")
 
 
@@ -437,7 +453,7 @@ def sugerir_cantidad(stock, ventas60d, dias_inv, estado):
     if estado == "LIQUIDAR":
         return 0, "Liquidar — no reponer"
 
-    if estado == "SIN_ACTIVIDAD":
+    if estado == "HUECO":
         return 0, "Sin actividad — no reponer"
 
     if v == 0:
@@ -709,7 +725,8 @@ def render_sidebar(conteos):
 
         vista_actual = st.session_state.get("vista", "URGENTE")
 
-        for estado, cfg in ESTADOS.items():
+        for estado in ORDEN_SIDEBAR:
+            cfg = ESTADOS[estado]
             cnt   = conteos.get(estado, 0)
             icon  = cfg["icon"]
             label = cfg["label"]
@@ -737,7 +754,7 @@ def render_sidebar(conteos):
 def vista_estado(df, ordenes_df, client, estado):
     cfg   = ESTADOS[estado]
     color = cfg["color"]
-    mostrar_form = estado in ("URGENTE", "EVALUAR")
+    mostrar_form = estado in ("REPROGRAMAR",)
 
     # Banner
     st.markdown(
@@ -789,7 +806,7 @@ def vista_estado(df, ordenes_df, client, estado):
         tipo_sel = st.selectbox("Categoria", ["Todas"] + tipos_disp, label_visibility="collapsed")
 
     # Boton enviar alerta — escribe Reporte_Urgente y llama Apps Script
-    if estado == "URGENTE":
+    if estado == "REPROGRAMAR":
         prods_u = sub["Producto"].unique()
         n_urgentes = len(prods_u)
 
@@ -797,7 +814,7 @@ def vista_estado(df, ordenes_df, client, estado):
             "<div style='margin-bottom:8px;'>",
             unsafe_allow_html=True,
         )
-        if st.button("📧  ENVIAR ALERTA — " + str(n_urgentes) + " productos urgentes", key="btn_alerta_email"):
+        if st.button("📧  ENVIAR ALERTA — " + str(n_urgentes) + " productos a reprogramar", key="btn_alerta_email"):
             with st.spinner("Preparando reporte y enviando email..."):
                 # Paso 1: escribir datos en Reporte_Urgente
                 ok_sheet = escribir_reporte(client, sub)
@@ -926,6 +943,8 @@ def main():
     if not df.empty:
         for estado in ESTADOS:
             conteos[estado] = int(df[df["_estado"] == estado]["Producto"].nunique())
+    # Orden de prioridad en sidebar
+    ORDEN_SIDEBAR = ["REPROGRAMAR","ESTRELLA","ALTA_ROTACION","SALUDABLE","LIQUIDAR","HUECO"]
 
     if "vista" not in st.session_state:
         st.session_state.vista = "URGENTE"
