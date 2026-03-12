@@ -907,50 +907,72 @@ def vista_dashboard(df, ordenes_df):
     col_left2, col_right2 = st.columns([1, 1])
 
     with col_left2:
-        top_col1, top_col2 = st.columns([3, 1])
-        with top_col1:
+        top_c1, top_c2, top_c3 = st.columns([3, 1, 1])
+        with top_c1:
             st.markdown(
                 "<div style='font-family:Bebas Neue,sans-serif;font-size:14px;"
-                "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>TOP PRODUCTOS POR VENTAS 60D</div>",
+                "letter-spacing:2px;color:#5A5A7A;margin-bottom:8px;'>TOP VENTAS 60D</div>",
                 unsafe_allow_html=True,
             )
-        with top_col2:
+        with top_c2:
             n_top = st.select_slider("", options=[10, 15, 20, 30, 50], value=10,
                                      key="slider_top_ventas",
                                      label_visibility="collapsed")
-        top_ventas = df.groupby("Producto")["Ventas60d"].sum().reset_index()
-        top_ventas = top_ventas.sort_values("Ventas60d", ascending=True).tail(n_top)
-        # Color segun si es estrella o no
-        estado_prod = df.groupby("Producto")["_estado"].first().to_dict()
-        colores_v = [
-            "#D4FF00" if estado_prod.get(p) == "ESTRELLA" else
-            "#FFB800" if estado_prod.get(p) == "ALTA_ROTACION" else "#4488FF"
-            for p in top_ventas["Producto"]
+        with top_c3:
+            vista_sku = st.toggle("Por SKU", key="toggle_top_sku", value=False)
+
+        if vista_sku:
+            top_data = df[["Producto", "Variante", "SKU", "Ventas60d", "_estado"]].copy()
+            top_data = top_data.sort_values("Ventas60d", ascending=True).tail(n_top)
+            top_data["etiqueta"] = top_data["SKU"] + "  " + top_data["Variante"].str[:18]
+            y_vals  = top_data["etiqueta"].tolist()
+            x_vals  = top_data["Ventas60d"].tolist()
+            estados = top_data["_estado"].tolist()
+            hover   = [
+                "<b>" + row["Producto"] + "</b><br>SKU: " + row["SKU"] +
+                "<br>Variante: " + row["Variante"] +
+                "<br>" + str(int(row["Ventas60d"])) + " u<extra></extra>"
+                for _, row in top_data.iterrows()
+            ]
+        else:
+            top_data = df.groupby("Producto").agg(
+                Ventas60d=("Ventas60d", "sum"),
+                _estado=("_estado", "first"),
+            ).reset_index()
+            top_data = top_data.sort_values("Ventas60d", ascending=True).tail(n_top)
+            y_vals  = top_data["Producto"].tolist()
+            x_vals  = top_data["Ventas60d"].tolist()
+            estados = top_data["_estado"].tolist()
+            hover   = [
+                "<b>" + p + "</b><br>" + str(int(v)) + " u<extra></extra>"
+                for p, v in zip(y_vals, x_vals)
+            ]
+
+        colores_top = [
+            "#D4FF00" if e == "ESTRELLA" else
+            "#FFB800" if e == "ALTA_ROTACION" else
+            "#FF3B30" if e == "REPROGRAMAR" else "#4488FF"
+            for e in estados
         ]
 
         fig_top = go.Figure(go.Bar(
-            x=top_ventas["Ventas60d"],
-            y=top_ventas["Producto"],
+            x=x_vals, y=y_vals,
             orientation="h",
-            marker=dict(color=colores_v),
-            text=top_ventas["Ventas60d"].astype(int).astype(str) + " u",
+            marker=dict(color=colores_top),
+            text=[str(int(v)) + " u" for v in x_vals],
             textposition="outside",
             textfont=dict(size=10, color="#E2E2F0"),
-            hovertemplate="<b>%{y}</b><br>%{x} unidades<extra></extra>",
+            hovertemplate=hover,
         ))
-        altura_top = max(340, n_top * 32)
+        altura_top = max(340, n_top * 34)
         fig_top.update_layout(
             paper_bgcolor="#0F0F1A",
             plot_bgcolor="#0F0F1A",
             font=dict(color="#E2E2F0", family="DM Sans"),
-            margin=dict(t=10, b=10, l=220, r=70),
+            margin=dict(t=10, b=10, l=240, r=70),
             height=altura_top,
             xaxis=dict(showgrid=True, gridcolor="#1C1C2E", zeroline=False, showticklabels=False),
-            yaxis=dict(
-                showgrid=False,
-                tickfont=dict(size=10),
-                automargin=True,
-            ),
+            yaxis=dict(showgrid=False, tickfont=dict(size=10), automargin=True),
         )
         st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
 
