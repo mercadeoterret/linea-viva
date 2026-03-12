@@ -219,12 +219,12 @@ def check_login():
             unsafe_allow_html=True,
         )
         
-        _, col, _ = st.columns([1, 2, 1])
+       _, col, _ = st.columns([1, 2, 1])
         with col:
-            # Botón oficial de Google usando HTML
+            # Botón oficial de Google usando components.html para evitar que Streamlit lo desactive
             google_button_html = f"""
-            <a href="{login_url}" target="_top" style="text-decoration: none;">
-                <div style="
+            <div style="display: flex; justify-content: center; font-family: 'DM Sans', Roboto, sans-serif; padding-top: 5px;">
+                <a href="{login_url}" target="_top" style="
                     display: flex; 
                     align-items: center; 
                     justify-content: center; 
@@ -233,14 +233,13 @@ def check_login():
                     border: 1px solid #dadce0; 
                     border-radius: 4px; 
                     padding: 10px 15px; 
-                    font-family: 'DM Sans', Roboto, sans-serif; 
+                    text-decoration: none; 
                     font-size: 14px; 
                     font-weight: 500; 
                     box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3);
                     cursor: pointer;
                     width: 100%;
                     max-width: 280px;
-                    margin: 0 auto;
                     transition: background-color 0.2s;
                 " onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='#ffffff'">
                     <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="18px" height="18px" viewBox="0 0 48 48" style="margin-right: 12px;">
@@ -250,67 +249,13 @@ def check_login():
                         <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
                         <path fill="none" d="M0 0h48v48H0z"></path>
                     </svg>
-                    Iniciar sesión con Google
-                </div>
-            </a>
+                    <span>Iniciar sesión con Google</span>
+                </a>
+            </div>
             """
-            st.markdown(google_button_html, unsafe_allow_html=True)
+            st.components.v1.html(google_button_html, height=60)
             
         st.stop()
-
-    else:
-        # --- DE REGRESO DE GOOGLE ---
-        token_url = "https://oauth2.googleapis.com/token"
-        data = {
-            "code": auth_code,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        }
-        
-        response = requests.post(token_url, data=data)
-        
-        if response.status_code == 200:
-            tokens = response.json()
-            access_token = tokens.get("access_token")
-            
-            user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-            headers = {"Authorization": f"Bearer {access_token}"}
-            user_info_response = requests.get(user_info_url, headers=headers)
-            
-            if user_info_response.status_code == 200:
-                user_info = user_info_response.json()
-                user_email = user_info.get("email", "").lower()
-                user_domain = user_email.split("@")[-1] if "@" in user_email else ""
-                
-                # Cerradura Doble
-                allowed_domains = [d.strip().lower() for d in st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",") if d.strip()]
-                allowed_emails  = [e.strip().lower() for e in st.secrets.get("ALLOWED_EMAILS", "").split(",") if e.strip()]
-                
-                autorizado = (user_domain in allowed_domains) or (user_email in allowed_emails)
-                
-                if not autorizado:
-                    st.error(f"Acceso denegado: {user_email}. Solo cuentas @terretsports.com y @terret.co.")
-                    st.query_params.clear() 
-                    if st.button("Probar con otra cuenta"):
-                        st.rerun()
-                    st.stop()
-                
-                # ¡ÉXITO!
-                st.session_state.logged_in = True
-                st.session_state.user_email = user_email
-                st.session_state.user_name = user_info.get("name", "")
-                
-                st.query_params.clear()
-                st.rerun() 
-                
-        else:
-            st.error("La sesión ha expirado o hubo un error de conexión con Google.")
-            st.query_params.clear()
-            if st.button("Volver a intentar"):
-                st.rerun()
-            st.stop()
 
 
 # ── SHEETS ───────────────────────────────────────────────────────────────────
