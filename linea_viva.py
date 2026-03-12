@@ -33,6 +33,33 @@ FABRICACION_DIAS = 30   # lead time conservador (rango 20-30 dias)
 UMBRAL_BS        = 25   # umbral best seller (ESTRELLA segun reglas)
 LEAD_TIME_DIAS   = 30
 
+# -- LOGIN CORREOS ------------------------------------------------------------
+
+import streamlit as st
+
+# Supongamos que 'user_info' es el diccionario que te devuelve el OAuth
+def check_access(email):
+    # Definimos los dominios permitidos
+    allowed_domains = ["terretsports.com", "terret.co"]
+    
+    # Extraemos el dominio del correo
+    domain = email.split('@')[-1]
+    
+    if domain in allowed_domains:
+        return True
+    return False
+
+# Lógica dentro de tu app
+if "user_info" in st.session_state:
+    email = st.session_state.user_info.get("email")
+    
+    if check_access(email):
+        st.success(f"Bienvenido al sistema de inventarios, {email}")
+        # Aquí va el resto de tu aplicación
+    else:
+        st.error("Acceso denegado. Esta aplicación es exclusiva para dominios autorizados.")
+        st.stop() # Detiene la ejecución para usuarios no autorizados
+
 # ── REGLAS ───────────────────────────────────────────────────────────────────
 
 def calcular_estado(stock, ventas60d, dias_inv):
