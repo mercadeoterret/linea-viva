@@ -788,13 +788,12 @@ def vista_dashboard(df, ordenes_df):
         st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
         return
 
-    # --- INICIO MAGIA DE SUCURSALES Y TIPO DE STOCK ---
+    # --- INICIO MAGIA DE SUCURSALES, VENTAS Y ESTADOS ---
     cols_sucursales = [c for c in df.columns if str(c).startswith("Stock ") and c not in ["Stock Actual", "Stock Minimo", "Stock", "Stock Fisico Total"]]
     
     if cols_sucursales:
         nombres_sucursales = [c.replace("Stock ", "") for c in cols_sucursales]
         
-        # UI: Controles en dos columnas
         c1, c2 = st.columns(2)
         with c1:
             sucursal_sel = st.selectbox("📍 Filtrar por sucursal:", ["Todas las sucursales"] + nombres_sucursales)
@@ -803,25 +802,30 @@ def vista_dashboard(df, ordenes_df):
             
         df = df.copy()
         
-        # Determinar qué columna de Google Sheets usar según lo que elija el usuario
         if sucursal_sel == "Todas las sucursales":
             if "Físico" in tipo_inv:
-                col_usar = "Stock Fisico Total" if "Stock Fisico Total" in df.columns else "Stock"
+                col_usar_stock = "Stock Fisico Total" if "Stock Fisico Total" in df.columns else "Stock"
             else:
-                col_usar = "Stock" # El disponible global
+                col_usar_stock = "Stock"
+            col_usar_ventas = "Ventas60d" # La original global
         else:
             if "Físico" in tipo_inv:
-                col_usar = "Fisico " + sucursal_sel
+                col_usar_stock = "Fisico " + sucursal_sel
             else:
-                col_usar = "Stock " + sucursal_sel
+                col_usar_stock = "Stock " + sucursal_sel
+            col_usar_ventas = "Ventas " + sucursal_sel
                 
-        # Inyectamos la columna elegida para que todo el dashboard la use
-        df["Stock"] = pd.to_numeric(df.get(col_usar, df["Stock"]), errors="coerce").fillna(0)
+        # Inyectamos Stock y Ventas de la sucursal elegida
+        df["Stock"] = pd.to_numeric(df.get(col_usar_stock, df["Stock"]), errors="coerce").fillna(0)
+        df["Ventas60d"] = pd.to_numeric(df.get(col_usar_ventas, df["Ventas60d"]), errors="coerce").fillna(0)
         
-        # ---> EL NUEVO AJUSTE: FILTRAR SKUS VACÍOS DE LA SUCURSAL <---
         if sucursal_sel != "Todas las sucursales":
-            # Nos quedamos solo con los productos que tienen al menos 1 unidad en esta sucursal
-            df = df[df["Stock"] > 0]
+            # Retenemos productos que tengan stock O ventas en esta tienda (Así no desaparecen del Top 10 si se agotaron)
+            df = df[(df["Stock"] > 0) | (df["Ventas60d"] > 0)].copy()
+            
+            # Recalculamos Días de Inventario y Segmentos con la velocidad de venta 100% LOCAL
+            df["DiasInv_n"] = df.apply(lambda r: (r["Stock"] / (r["Ventas60d"] / 60.0)) if r["Ventas60d"] > 0 else 9999, axis=1)
+            df["_estado"] = df.apply(lambda r: calcular_estado(r["Stock"], r["Ventas60d"], r["DiasInv_n"]), axis=1)
             
         df["_valor_costo"] = df["Stock"] * df["Costo"]
         df["_valor_venta"] = df["Stock"] * df["Precio Venta"]
