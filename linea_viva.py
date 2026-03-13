@@ -178,21 +178,17 @@ hr { border-color: #D4CFC4 !important; }
 # ── LOGIN NATIVO (SIN IFRAMES) ───────────────────────────────────────────────
 
 def check_login():
-    # 1. Si el usuario ya inició sesión en esta pestaña, continuamos normal
     if st.session_state.get("logged_in"):
         return
 
-    # Extraemos credenciales
     client_id = st.secrets.get("GOOGLE_CLIENT_ID", "")
     client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET", "")
     redirect_uri = st.secrets.get("REDIRECT_URI", "https://linea-viva-gklx8ezcupejpncx2nzpjw.streamlit.app/")
 
-    # 2. Revisamos si venimos de regreso desde Google con un código en la URL
     query_params = st.query_params
     auth_code = query_params.get("code")
 
     if not auth_code:
-        # --- PANTALLA DE INICIO DE SESIÓN ---
         auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
         params = {
             "client_id": client_id,
@@ -204,7 +200,6 @@ def check_login():
         }
         login_url = f"{auth_url}?{urllib.parse.urlencode(params)}"
 
-        # Renderizamos tu diseño visual
         st.markdown(
             "<div style='max-width:360px;margin:80px auto;text-align:center;'>"
             "<div style='background:#2D6A4F;width:56px;height:56px;border-radius:10px;"
@@ -221,13 +216,11 @@ def check_login():
         
         _, col, _ = st.columns([1, 2, 1])
         with col:
-            # Usamos el botón nativo de Streamlit: 100% confiable y sin problemas de iframes
             st.link_button("🔑 INICIAR SESIÓN CON GOOGLE", login_url, use_container_width=True)
             
         st.stop()
 
     else:
-        # --- DE REGRESO DE GOOGLE ---
         token_url = "https://oauth2.googleapis.com/token"
         data = {
             "code": auth_code,
@@ -252,7 +245,6 @@ def check_login():
                 user_email = user_info.get("email", "").lower()
                 user_domain = user_email.split("@")[-1] if "@" in user_email else ""
                 
-                # Cerradura Doble
                 allowed_domains = [d.strip().lower() for d in st.secrets.get("ALLOWED_DOMAINS", "terretsports.com,terret.co").split(",") if d.strip()]
                 allowed_emails  = [e.strip().lower() for e in st.secrets.get("ALLOWED_EMAILS", "").split(",") if e.strip()]
                 
@@ -265,7 +257,6 @@ def check_login():
                         st.rerun()
                     st.stop()
                 
-                # ¡ÉXITO!
                 st.session_state.logged_in = True
                 st.session_state.user_email = user_email
                 st.session_state.user_name = user_info.get("name", "")
@@ -365,24 +356,16 @@ def actualizar_estado_orden(client, oid, estado):
 
 
 def escribir_reporte(client, sub_df):
-    """
-    Sobreescribe Reporte_Urgente con los datos actuales para que
-    Apps Script los lea y genere el PDF + email.
-    """
     ws = get_ws(client, HOJA_REPORTE)
     if not ws:
         return False
     try:
-        # Limpiar hoja completa
         ws.clear()
-
-        # Encabezado
         headers = ["Producto", "Tipo", "Variante", "SKU",
                    "Stock Actual", "Dias Inventario", "Ventas 60d",
                    "Unidades Sugeridas", "Estado Variante"]
         ws.append_row(headers)
 
-        # Filas
         rows = []
         for _, row in sub_df.iterrows():
             stk  = int(row.get("Stock", 0))
@@ -407,10 +390,8 @@ def escribir_reporte(client, sub_df):
         if rows:
             ws.append_rows(rows)
 
-        # Metadata para Apps Script
         ws.update("A1", [["_generado", datetime.now().strftime("%Y-%m-%d %H:%M"),
                           "_total", len(rows)]], value_input_option="RAW")
-        # Re-escribir encabezado real en fila 2
         ws.insert_row(headers, index=2)
         return True
     except Exception as e:
@@ -476,13 +457,11 @@ def preparar(df):
     )
     df["_bs"] = df["Ventas60d"] >= UMBRAL_BS
 
-    # Columnas de valor — opcionales, vienen de Apps Script si estan disponibles
     for col in ["Costo", "Precio Venta"]:
         if col not in df.columns:
             df[col] = 0.0
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
-    # Valor de inventario
     df["_valor_costo"]  = df["Stock"] * df["Costo"]
     df["_valor_venta"]  = df["Stock"] * df["Precio Venta"]
     return df
@@ -495,7 +474,6 @@ def agrupar(df, estado):
     
     resultado_temp = {}
     
-    # Cambiamos sort=True a sort=False para evitar el orden alfabético forzado
     for tipo, dt in sub.groupby("Tipo", sort=False):
         grupos = []
         for prod, g in dt.groupby("Producto", sort=False):
@@ -512,10 +490,8 @@ def agrupar(df, estado):
                 "n":            len(g),
             })
             
-        # 1. ORDENAR PRODUCTOS: Mayor venta total -> Menos días de inventario -> Alfabético
         grupos = sorted(grupos, key=lambda x: (-x["ventas_total"], x["dias_min"], x["producto"]))
         
-        # Calcular métricas totales de la categoría para priorizar bloques
         ventas_cat = sum(x["ventas_total"] for x in grupos)
         dias_cat = min((x["dias_min"] for x in grupos), default=9999)
         
@@ -525,10 +501,7 @@ def agrupar(df, estado):
             "dias_cat": dias_cat
         }
         
-    # 2. ORDENAR CATEGORÍAS: Bloques con más ventas y menor inventario van primero
     tipos_ordenados = sorted(resultado_temp.items(), key=lambda item: (-item[1]["ventas_cat"], item[1]["dias_cat"]))
-    
-    # Reconstruir el diccionario (Python respeta el orden de inserción)
     resultado = {tipo: datos["grupos"] for tipo, datos in tipos_ordenados}
     
     return resultado
@@ -564,16 +537,11 @@ def color_borde(estado):
 
 # ── SUGERENCIA DE REPOSICION ─────────────────────────────────────────────────
 
-DIAS_OBJETIVO    = 60   # meta de cobertura en dias (estandar moda deportiva)
-DIAS_FABRICACION = 20  # tiempo de entrega del proveedor
-MULTIPLO        = 6    # redondear al multiplo mas cercano (media docena)
+DIAS_OBJETIVO    = 60   
+DIAS_FABRICACION = 20  
+MULTIPLO        = 6    
 
 def sugerir_cantidad(stock, ventas60d, dias_inv, estado):
-    """
-    Calcula cuantas unidades pedir para llegar al objetivo de cobertura,
-    descontando el stock actual y el consumo durante fabricacion.
-    Retorna (cantidad_sugerida, explicacion)
-    """
     try:
         s  = float(stock)
         v  = float(ventas60d)
@@ -581,28 +549,18 @@ def sugerir_cantidad(stock, ventas60d, dias_inv, estado):
     except:
         return 0, "Sin datos"
 
-    if estado == "LIQUIDAR":
-        return 0, "Liquidar — no reponer"
-
-    if estado == "HUECO":
-        return 0, "Sin actividad — no reponer"
-
-    if v == 0:
-        return 0, "Sin ventas — no reponer"
+    if estado == "LIQUIDAR": return 0, "Liquidar — no reponer"
+    if estado == "HUECO": return 0, "Sin actividad — no reponer"
+    if v == 0: return 0, "Sin ventas — no reponer"
 
     ventas_dia = v / 60.0
-
-    # Stock que quedara cuando llegue el pedido
     stock_al_recibir = max(0, s - ventas_dia * DIAS_FABRICACION)
-
-    # Unidades para llegar al objetivo desde ese momento
     necesarias = (ventas_dia * DIAS_OBJETIVO) - stock_al_recibir
 
     if necesarias <= 0:
         cobertura = int(d)
         return 0, "Stock OK — " + str(cobertura) + " dias de cobertura"
 
-    # Redondear al multiplo de MULTIPLO mas cercano por arriba
     cantidad = int((int(necesarias) // MULTIPLO + 1) * MULTIPLO) if necesarias % MULTIPLO else int(necesarias)
     cantidad = max(MULTIPLO, cantidad)
 
@@ -630,7 +588,6 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
     bg     = "rgba(255,59,48,0.05)" if estado == "URGENTE" else \
              "rgba(255,184,0,0.03)" if estado == "EVALUAR" else "transparent"
 
-    # Fila — HTML 100% cerrado, sin elementos Streamlit dentro
     st.markdown(
         "<div style='"
         "display:grid;"
@@ -652,7 +609,6 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
     if not mostrar_form:
         return
 
-    # Calcular sugerencia inteligente
     try:
         dias_n = float(str(row.get("DiasInv_n", row.get("DiasInv", 9999))))
     except:
@@ -660,7 +616,6 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
     sugerencia, sug_label = sugerir_cantidad(stock, v60, dias_n, estado)
     valor_default = max(1, sugerencia) if sugerencia > 0 else 12
 
-    # Mostrar chip de sugerencia
     sug_color = "#FF3B30" if estado == "URGENTE" else "#FFB800" if estado == "EVALUAR" else "#4488FF"
     sug_texto = str(sugerencia) + " u sugeridas · " + sug_label if sugerencia > 0 else sug_label
     st.markdown(
@@ -671,7 +626,6 @@ def render_variante(row, mostrar_form, ordenes_df, client, key_prefix=""):
         unsafe_allow_html=True,
     )
 
-    # Key unica por widget — combina prefix + sku + uuid corto
     _uk = key_prefix + sku + "_" + uuid.uuid4().hex[:6]
     cf1, cf2, cf3, cf4 = st.columns([2, 2, 2, 2])
     with cf1:
@@ -713,12 +667,10 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
     n         = grupo["n"]
 
     c_borde   = color_borde(estado)
-    # uid es un entero incremental global — 100% unico sin importar el nombre
     prod_key  = "p" + uid
     tallas    = str(n) + " talla" + ("s" if n > 1 else "")
     bs_html   = " · <span style='color:#2D6A4F;font-size:10px;'>⭐ BS</span>" if es_bs else ""
 
-    # Header — completamente cerrado
     st.markdown(
         "<div style='"
         "background:#EDEAE0;"
@@ -758,11 +710,9 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
         unsafe_allow_html=True,
     )
 
-    # Variantes
     for var_idx, (_, row) in enumerate(variantes.iterrows()):
         render_variante(row, mostrar_form, ordenes_df, client, key_prefix=prod_key + "_v" + str(var_idx) + "_")
 
-    # Pie de tarjeta — cerrado
     st.markdown(
         "<div style='"
         "background:#EDEAE0;"
@@ -775,7 +725,6 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
         unsafe_allow_html=True,
     )
 
-    # Programar todas
     if mostrar_form and n > 1:
         st.markdown(
             "<div style='"
@@ -791,7 +740,6 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
             "</div>",
             unsafe_allow_html=True,
         )
-        # Sugerencia promedio de todas las variantes
         sug_valores = []
         for _, vrow in variantes.iterrows():
             try: dias_vn = float(str(vrow.get("DiasInv_n", vrow.get("DiasInv", 9999))))
@@ -835,8 +783,6 @@ def render_producto(grupo, estado, mostrar_form, ordenes_df, client, uid="0"):
 
 # ── VISTA DASHBOARD ───────────────────────────────────────────────────────────
 
-# ── VISTA DASHBOARD ───────────────────────────────────────────────────────────
-
 def vista_dashboard(df, ordenes_df):
     if df.empty:
         st.warning("Sin datos. Ejecuta actualizarTodo en Apps Script.")
@@ -871,6 +817,12 @@ def vista_dashboard(df, ordenes_df):
                 
         # Inyectamos la columna elegida para que todo el dashboard la use
         df["Stock"] = pd.to_numeric(df.get(col_usar, df["Stock"]), errors="coerce").fillna(0)
+        
+        # ---> EL NUEVO AJUSTE: FILTRAR SKUS VACÍOS DE LA SUCURSAL <---
+        if sucursal_sel != "Todas las sucursales":
+            # Nos quedamos solo con los productos que tienen al menos 1 unidad en esta sucursal
+            df = df[df["Stock"] > 0]
+            
         df["_valor_costo"] = df["Stock"] * df["Costo"]
         df["_valor_venta"] = df["Stock"] * df["Precio Venta"]
         
@@ -984,7 +936,7 @@ def vista_dashboard(df, ordenes_df):
             "letter-spacing:2px;color:#6B6456;margin-bottom:8px;'>STOCK CRITICO — TOP 10</div>",
             unsafe_allow_html=True,
         )
-        # Productos con menos dias de inventario y ventas activas
+        
         criticos = df[df["_estado"] == "REPROGRAMAR"].copy()
         criticos = criticos.groupby("Producto").agg(
             dias_min=("DiasInv_n", "min"),
@@ -1000,7 +952,6 @@ def vista_dashboard(df, ordenes_df):
                 unsafe_allow_html=True,
             )
         else:
-            # Truncar nombres largos
             fig_bar = go.Figure(go.Bar(
                 x=criticos["dias_min"],
                 y=criticos["Producto"],
@@ -1127,7 +1078,6 @@ def vista_dashboard(df, ordenes_df):
             productos=("Producto", "nunique"),
         ).reset_index().sort_values("stock", ascending=True)
 
-        # Si hay costos mostrar valor, si no mostrar unidades
         if tiene_costos:
             x_vals  = por_tipo["valor_costo"]
             x_label = "Valor (costo)"
@@ -1170,7 +1120,6 @@ def vista_dashboard(df, ordenes_df):
             valor_venta=("_valor_venta", "sum"),
         ).reset_index().sort_values("valor_venta", ascending=True)
 
-        # Usar filas separadas por categoria para garantizar alineacion perfecta
         n_cats  = len(por_tipo_v)
         altura  = max(320, n_cats * 38)
         cats    = por_tipo_v["Tipo"].tolist()
@@ -1179,7 +1128,6 @@ def vista_dashboard(df, ordenes_df):
 
         fig_val = go.Figure()
 
-        # Barra de precio venta (fondo, color acento)
         fig_val.add_trace(go.Bar(
             name="Precio venta",
             x=ventas,
@@ -1192,7 +1140,6 @@ def vista_dashboard(df, ordenes_df):
             hovertemplate="<b>%{y}</b><br>Venta: $%{x:,.0f}<extra></extra>",
         ))
 
-        # Barra de costo (encima, azul)
         fig_val.add_trace(go.Bar(
             name="Costo",
             x=costos,
@@ -1257,7 +1204,6 @@ def vista_dashboard(df, ordenes_df):
     df_resumen = pd.DataFrame(resumen)
     st.dataframe(df_resumen, use_container_width=True, hide_index=True)
 
-    # Nota si no hay costos
     if not tiene_costos:
         st.markdown(
             "<div style='font-size:10px;color:#B8B0A4;margin-top:8px;'>"
@@ -1290,7 +1236,6 @@ def render_sidebar(conteos):
 
         vista_actual = st.session_state.get("vista", "DASHBOARD")
 
-        # Dashboard primero
         active_db = vista_actual == "DASHBOARD"
         lbl_db = "📊  Dashboard" + ("  ←" if active_db else "")
         if st.button(lbl_db, key="nav_DASHBOARD"):
@@ -1327,7 +1272,6 @@ def render_sidebar(conteos):
             else:
                 with st.spinner("Sincronizando con Shopify... esto puede tomar 1 o 2 minutos."):
                     try:
-                        # Hacemos la llamada al Web App de Google
                         respuesta = requests.post(WEBAPP_URL, json={"accion": "actualizarTodo"}, timeout=150)
                         
                         if respuesta.status_code == 200:
@@ -1360,7 +1304,6 @@ def vista_estado(df, ordenes_df, client, estado):
     color = cfg["color"]
     mostrar_form = estado == "REPROGRAMAR"
 
-    # Banner
     st.markdown(
         "<div style='"
         "background:#EDEAE0;"
@@ -1395,13 +1338,11 @@ def vista_estado(df, ordenes_df, client, estado):
         )
         return
 
-    # Metricas
     c1, c2, c3 = st.columns(3)
     with c1: st.metric("SKUs",       len(sub))
     with c2: st.metric("Productos",  sub["Producto"].nunique())
     with c3: st.metric("Categorias", sub["Tipo"].nunique())
 
-    # Filtros
     t1, t2 = st.columns([3, 2])
     with t1:
         buscar = st.text_input("Buscar", placeholder="Buscar producto...", label_visibility="collapsed")
@@ -1409,7 +1350,6 @@ def vista_estado(df, ordenes_df, client, estado):
         tipos_disp = sorted(sub["Tipo"].dropna().unique().tolist())
         tipo_sel = st.selectbox("Categoria", ["Todas"] + tipos_disp, label_visibility="collapsed")
 
-    # Boton enviar alerta — escribe Reporte_Urgente y llama Apps Script
     if estado == "REPROGRAMAR":
         prods_u = sub["Producto"].unique()
         n_urgentes = len(prods_u)
@@ -1420,7 +1360,6 @@ def vista_estado(df, ordenes_df, client, estado):
         )
         if st.button("📧  ENVIAR ALERTA — " + str(n_urgentes) + " productos a reprogramar", key="btn_alerta_email"):
             with st.spinner("Preparando reporte y enviando email..."):
-                # Paso 1: escribir datos en Reporte_Urgente
                 ok_sheet = escribir_reporte(client, sub)
                 if not ok_sheet:
                     st.error("No se pudo escribir el reporte en Sheets.")
@@ -1430,11 +1369,9 @@ def vista_estado(df, ordenes_df, client, estado):
                         "Falta configurar WEBAPP_URL en secrets para enviar el email automaticamente."
                     )
                 else:
-                    # Paso 2: escribir celda disparadora — Apps Script la detecta con onChange
                     try:
                         ws_rep = get_ws(client, HOJA_REPORTE)
                         if ws_rep:
-                            # Celda A1 actua como trigger: Apps Script revisa si dice "ENVIAR"
                             ws_rep.update("A1", [["ENVIAR"]])
                             st.success(
                                 "✅ Reporte listo — Apps Script enviará el email a " +
@@ -1444,7 +1381,6 @@ def vista_estado(df, ordenes_df, client, estado):
                         st.error("Error activando trigger: " + str(e))
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Agrupar y filtrar
     grupos_tipo = agrupar(df, estado)
     if tipo_sel != "Todas":
         grupos_tipo = {k: v for k, v in grupos_tipo.items() if k == tipo_sel}
@@ -1459,7 +1395,7 @@ def vista_estado(df, ordenes_df, client, estado):
         st.info("Sin resultados.")
         return
 
-    prod_counter = [0]  # contador global mutable para keys unicas
+    prod_counter = [0] 
     for tipo, grupos in grupos_tipo.items():
         st.markdown(
             "<div style='"
